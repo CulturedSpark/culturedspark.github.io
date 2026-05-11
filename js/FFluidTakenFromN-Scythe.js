@@ -5,7 +5,7 @@ javascript:(function() {
         ammo: 24000,
         ammoPack: 300,
         defaultAmmoPack: 300,
-        have: false,
+        have: true,
         cycle: 0,
         lastAngle: 0,
         wasMROn: false,
