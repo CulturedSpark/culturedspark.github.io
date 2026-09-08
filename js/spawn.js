@@ -1340,7 +1340,7 @@ const spawn = {
                     } else {
                         level.exit.x = 5500;
                     }
-                    level.exit.y = -330;
+                    level.exit.y = -320;
                     Matter.Composite.remove(engine.world, map[map.length - 1]);
                     map.splice(map.length - 1, 1);
                     simulation.draw.setPaths(); //redraw map draw path
@@ -6663,10 +6663,33 @@ const spawn = {
         me.startingDamageReduction = me.damageReduction
         me.isInvulnerable = false
         me.invulnerabilityCountDown = 0
+        me.drawMantisConstraints = function () {
+            ctx.beginPath();
+            ctx.moveTo(this.cons.pointA.x, this.cons.pointA.y)
+            ctx.lineTo(this.position.x, this.position.y)
+            ctx.moveTo(this.cons2.pointA.x, this.cons2.pointA.y)
+            ctx.lineTo(this.position.x, this.position.y)
+            for (let i = 0; i < this.babyList.length; i++) {
+                if (this.babyList[i].alive) {
+                    ctx.moveTo(this.position.x, this.position.y)
+                    ctx.lineTo(this.babyList[i].position.x, this.babyList[i].position.y)
+
+                    const next = this.babyList[(i + 1) % this.babyList.length]
+                    if (next.alive) {
+                        ctx.moveTo(this.babyList[i].position.x, this.babyList[i].position.y)
+                        ctx.lineTo(next.position.x, next.position.y)
+                    }
+                }
+            }
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = "#222";
+            ctx.stroke();
+        }
         me.do = function () {
             if (this.seePlayer.recall) this.healthBar3()
             this.checkStatus();
             this.gravity();
+            this.drawMantisConstraints()
             //draw the two dots on the end of the springs
             ctx.beginPath();
             ctx.arc(this.cons.pointA.x, this.cons.pointA.y, 6, 0, 2 * Math.PI);
@@ -10294,7 +10317,7 @@ const spawn = {
         const radius = 17
         const worldScale = 950
         const steeringGain = 0.0003
-        const maxSteeringAcceleration = 0.02
+        const maxSteeringAcceleration = 0.024 //this controls speed
         const flockFrictionAir = 0.9
         const gravitation = 0.02
         const softeningDistance = 0.005 * worldScale
@@ -10306,8 +10329,8 @@ const spawn = {
         const playerTargetRadiusScale = 2//1.35
         const playerTargetGrowthRate = 1.002
         const flockInvulnerabilityCycles = 100
-        const reducedInvulnerabilityFlockCount = 20
-        const noInvulnerabilityFlockCount = 10
+        const fullInvulnerabilityFlockCount = 100
+        const noInvulnerabilityFlockCount = 40
         const flockOrigin = { x: x, y: y }
         const flockFill = "#000"//"rgb(35, 167, 190)"
         const playerTargetFill = "#000"//"rgb(0, 124, 146)"
@@ -10386,10 +10409,11 @@ const spawn = {
         }
         const startFlockInvulnerability = () => {
             let duration = flockInvulnerabilityCycles
-            if (aliveFlock.length < noInvulnerabilityFlockCount) {
+            if (aliveFlock.length <= noInvulnerabilityFlockCount) {
                 duration = 0
-            } else if (aliveFlock.length < reducedInvulnerabilityFlockCount) {
-                duration = Math.ceil(flockInvulnerabilityCycles * 0.5)
+            } else if (aliveFlock.length < fullInvulnerabilityFlockCount) {
+                duration *= (aliveFlock.length - noInvulnerabilityFlockCount) /
+                    (fullInvulnerabilityFlockCount - noInvulnerabilityFlockCount)
             }
             flockInvulnerabilityEndCycle = Math.max(flockInvulnerabilityEndCycle, simulation.cycle + duration)
             if (flockInvulnerabilityEndCycle > simulation.cycle) {
@@ -10574,7 +10598,7 @@ const spawn = {
             me.flockPlayerFollowerTrain = -1
             if (me.isFlockPlayerTarget) playerTargetGroups[playerTargetGroupIndex].target = me
             me.collisionFilter.mask = cat.player | cat.body | cat.bullet //| cat.map
-            me.damageReduction = 0.25
+            me.damageReduction = 0.2
             me.startingDamageReduction = me.damageReduction
             me.isInvulnerable = false
             me.inertia = Infinity;
