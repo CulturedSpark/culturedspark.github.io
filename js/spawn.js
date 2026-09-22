@@ -61,78 +61,23 @@ const spawn = {
         spawn.mobTypeSpawnOrder = []
         spawn.mobTierSpawnOrder = []
         spawn.pickList = ["starter", "starter",]
-        if (simulation.difficultyMode > 3) {
-            let tier = 1
-            seededShuffle(spawn.tier[tier])
-            seededShuffle(spawn.bossTier[tier])
-            for (let i = 0; i < 3; i++) {
-                spawn.mobTypeSpawnOrder.push(spawn.tier[tier][i])
-                spawn.mobTierSpawnOrder.push(tier)
-            }
-
-            tier++
-            seededShuffle(spawn.tier[tier])
-            seededShuffle(spawn.bossTier[tier])
-            for (let i = 0; i < 3; i++) {
-                spawn.mobTypeSpawnOrder.push(spawn.tier[tier][i])
-                spawn.mobTierSpawnOrder.push(tier)
-            }
-
-            tier++
-            seededShuffle(spawn.tier[tier])
-            seededShuffle(spawn.bossTier[tier])
-            for (let i = 0; i < 4; i++) {
-                spawn.mobTypeSpawnOrder.push(spawn.tier[tier][i])
-                spawn.mobTierSpawnOrder.push(tier)
-            }
-
-            tier++
-            seededShuffle(spawn.tier[tier])
-            seededShuffle(spawn.bossTier[tier])
-            for (let i = 0; i < 4; i++) {
-                spawn.mobTypeSpawnOrder.push(spawn.tier[tier][i])
-                spawn.mobTierSpawnOrder.push(tier)
-            }
-        } else { //easier tier progression
-            spawn.mobTypeSpawnOrder.push("starter")
-            spawn.mobTierSpawnOrder.push(0)
-
-            let tier = 1
-            seededShuffle(spawn.tier[tier])
-            seededShuffle(spawn.bossTier[tier])
-            for (let i = 0; i < 3; i++) {
-                spawn.mobTypeSpawnOrder.push(spawn.tier[tier][i])
-                spawn.mobTierSpawnOrder.push(tier)
-            }
-
-            tier++
-            seededShuffle(spawn.tier[tier])
-            seededShuffle(spawn.bossTier[tier])
-            for (let i = 0; i < 4; i++) {
-                spawn.mobTypeSpawnOrder.push(spawn.tier[tier][i])
-                spawn.mobTierSpawnOrder.push(tier)
-            }
-
-            tier++
-            seededShuffle(spawn.tier[tier])
-            seededShuffle(spawn.bossTier[tier])
-            for (let i = 0; i < 4; i++) {
-                spawn.mobTypeSpawnOrder.push(spawn.tier[tier][i])
-                spawn.mobTierSpawnOrder.push(tier)
-            }
-
-            tier++
-            seededShuffle(spawn.tier[tier])
-            for (let i = 0; i < 2; i++) {
-                spawn.mobTypeSpawnOrder.push(spawn.tier[tier][i])
-                spawn.mobTierSpawnOrder.push(tier)
-            }
+        const options = simulation.difficultyOptions;
+        const interval = options.isMobTier4 ? 3 : 4;
+        for (let tier = 1; tier <= 4; tier++) {
+            seededShuffle(spawn.tier[tier]);
+            seededShuffle(spawn.bossTier[tier]);
+        }
+        for (let i = 0; i < 14; i++) {
+            const tier = options.isMobTier23 ? Math.min(4, 1 + Math.floor(i / interval)) : 1;
+            const isStarter = options.isMobTier23 && !options.isMobTier4 && i === 0;
+            spawn.mobTypeSpawnOrder.push(isStarter ? "starter" : spawn.tier[tier][i % spawn.tier[tier].length]);
+            spawn.mobTierSpawnOrder.push(isStarter ? 0 : tier);
         }
         spawn.setSpawnList()
     },
     setSpawnList() { //this is run at the start of each new level to determine the possible mobs for the level
         spawn.pickList.splice(0, 1);
-        if (level.levelsCleared > 13) {
+        if (level.levelsCleared > 13 && simulation.difficultyOptions.isMobTier23) {
             const push = spawn.fullPickList[Math.floor(Math.random() * spawn.fullPickList.length)]
             spawn.pickList.push(push);
         } else {
@@ -142,7 +87,7 @@ const spawn = {
     },
     randomizeSpawnList(tier) { //used in subway to get new random mobs at current tier level
         spawn.pickList.splice(0, 1);
-        if (level.levelsCleared > 13) {
+        if (level.levelsCleared > 13 && simulation.difficultyOptions.isMobTier23) {
             const push = spawn.fullPickList[Math.floor(Math.random() * spawn.fullPickList.length)]
             spawn.pickList.push(push);
         } else {
@@ -152,11 +97,11 @@ const spawn = {
         }
     },
     randomMobByLevelsCleared(x, y) {
-        if (level.levelsCleared > 13) {
+        if (level.levelsCleared > 13 && simulation.difficultyOptions.isMobTier23) {
             const pick = spawn.fullPickList[Math.floor(Math.random() * spawn.fullPickList.length)]
             spawn[pick](x, y);
         } else {
-            const t = spawn.mobTierSpawnOrder[level.levelsCleared]
+            const t = spawn.mobTierSpawnOrder[Math.min(level.levelsCleared, 13)]
             const pickFrom = spawn.tier[t]
             const pick = pickFrom[Math.floor(Math.random() * pickFrom.length)];
             spawn[pick](x, y);
@@ -235,7 +180,7 @@ const spawn = {
         seededShuffle(spawn.randomMobPositions)
         const maxMobs = (simulation.difficultyMode === 1) ? 2 : Math.ceil(5 * Math.log(level.levelsCleared + 1))
         const mobsInLevel = mob.filter(who => who.alive && who.isDropPowerUp && !who.isBoss && !who.shield && !who.isMobBullet && who.collisionFilter.category !== cat.mobBullet).length
-        const mobsToSpawn = Math.min(spawn.randomMobPositions.length, Math.max(0, maxMobs - mobsInLevel))
+        const mobsToSpawn = Math.min(spawn.randomMobPositions.length, Math.max(0, maxMobs - mobsInLevel) * (simulation.difficultyOptions.isDoubleMobs ? 2 : 1))
         for (let i = 0; i < mobsToSpawn; i++) {
             const position = spawn.randomMobPositions[i]
             if (position.isSmall) {
@@ -287,7 +232,7 @@ const spawn = {
     ],
     randomGroup(x, y, chance = 1) {
         if ((spawn.spawnChance(chance) && simulation.difficulty > 2) || chance === Infinity) {
-            if (level.levelsCleared > 13) {
+            if (level.levelsCleared > 13 && simulation.difficultyOptions.isMobTier23) {
                 function pickRandom(arr) {
                     const group = arr[Math.floor(Math.random() * arr.length)];
                     return group[Math.floor(Math.random() * group.length)];
@@ -299,7 +244,7 @@ const spawn = {
                     spawn.lineGroup(x, y, pick);
                 }
             } else {
-                const t = spawn.mobTierSpawnOrder[level.levelsCleared]
+                const t = spawn.mobTierSpawnOrder[Math.min(level.levelsCleared, 13)]
                 let pick = spawn.allowedGroupList[t][Math.floor(Math.random() * spawn.allowedGroupList[t].length)];
                 if (Math.random() < 0.55) {
                     spawn.nodeGroup(x, y, pick);
@@ -310,13 +255,13 @@ const spawn = {
         }
     },
     randomLevelBoss(x, y, options = []) {
-        if (level.levelsCleared > 13) {
+        if (level.levelsCleared > 13 && simulation.difficultyOptions.isMobTier23) {
             const pick = spawn.randomBossList[Math.floor(Math.random() * spawn.randomBossList.length)]
             spawn[pick](x, y)
         } else {
             if (simulation.difficultyMode > 1 || level.levelsCleared > 1) {
                 if (options.length === 0) {
-                    const t = spawn.mobTierSpawnOrder[level.levelsCleared]
+                    const t = spawn.mobTierSpawnOrder[Math.min(level.levelsCleared, 13)]
                     const name = spawn.bossTier[t][spawn.bossTierIndex[t]]
                     if (!name) { //not sure if this is needed, but I'm trying to fix a rare bug
                         const pick = spawn.randomBossList[Math.floor(Math.random() * spawn.randomBossList.length)]
@@ -335,7 +280,7 @@ const spawn = {
         }
     },
     secondaryBossChance(x, y, options = []) {
-        if (simulation.difficultyMode > 2) {
+        if (simulation.difficultyOptions.isSecondBoss) {
             spawn.randomLevelBoss(x, y, options);
             powerUps.spawn(x - 30, y, "ammo");
             powerUps.spawn(x + 30, y, "ammo");
@@ -344,8 +289,8 @@ const spawn = {
         }
     },
     randomHigherTierMob(x, y) { //not in use currently
-        if (simulation.difficultyMode > 3) {
-            const t = spawn.mobTierSpawnOrder[level.levelsCleared]
+        if (simulation.difficultyOptions.isMobTier4) {
+            const t = spawn.mobTierSpawnOrder[Math.min(level.levelsCleared, 13)]
             const pickFrom = spawn.tier[t]
             const pick = pickFrom[Math.floor(Math.random() * pickFrom.length)];
             spawn[pick](x, y)
@@ -400,7 +345,7 @@ const spawn = {
                         ctx.lineWidth = 10;
                         ctx.stroke();
                         if (tech.isDarkEnergy) {
-                            m.energy += 0.00255 * scale
+                            m.addEnergy(0.00255 * scale)
                             if (!(simulation.cycle % 12)) simulation.energyGenGraphic()
                         }
                     }
@@ -414,7 +359,7 @@ const spawn = {
                         ctx.lineWidth = 10;
                         ctx.stroke();
                         if (tech.isDarkEnergy) {
-                            m.energy += 0.00255 * scale
+                            m.addEnergy(0.00255 * scale)
                             if (!(simulation.cycle % 12)) simulation.energyGenGraphic()
                         }
                     } else {
@@ -562,7 +507,7 @@ const spawn = {
             }
         };
         me.invulnerable = function () {
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 this.invulnerableCount++
                 if (this.invulnerableCount === 120 || this.invulnerableCount === 300 || this.invulnerableCount === 540) { //after a couple sec ond delay
                     //spawn mobs
@@ -694,7 +639,7 @@ const spawn = {
             name: "mobs",
             spawnRate: Math.max(60, 240 - 20 * simulation.difficultyMode),
             do() {
-                if (!(me.cycle % this.spawnRate) && mob.length < me.maxMobs && !this.isInvulnerable) {
+                if (!(me.cycle % this.spawnRate) && mob.length < me.maxMobs && !this.isPhaseInvulnerable) {
                     me.torque += 0.000015 * me.inertia; //spin
 
                     const index = Math.floor((me.cycle % (this.spawnRate * 6)) / this.spawnRate) //int from 0 to 5
@@ -1310,11 +1255,7 @@ const spawn = {
             }
             if (!this.hasRunDeathScript) {
                 this.hasRunDeathScript = true
-                //record win on this difficulty level to show up in the difficulty settings as a
-                if (!simulation.isCheating) {
-                    localSettings.difficultyCompleted[simulation.difficultyMode] = true
-                    localStorage.setItem("localSettings", JSON.stringify(localSettings)); //update local storage
-                }
+                powerUps.difficulty.recordWin();
 
                 //make a block body to replace this one
                 //this body is too big to leave behind in the normal way mobs.replace()
@@ -1874,7 +1815,7 @@ const spawn = {
                 this.force.x += force.x;
                 this.force.y += force.y;
             }
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 this.invulnerableCount--
                 if (this.invulnerableCount < 0) {
                     this.isInvulnerable = false
@@ -1925,7 +1866,7 @@ const spawn = {
                                 ctx.strokeStyle = `rgba(0,0,255,0.2)`;
                                 ctx.lineWidth = 8
                                 ctx.stroke();
-                                if (m.immuneCycle < m.cycle) m.takeDamage(0.00023 * spawn.dmgToPlayerByLevelsCleared());
+                                if (!(m.cycle % 10) && m.immuneCycle < m.cycle) m.takeDamage(0.0023 * spawn.dmgToPlayerByLevelsCleared());
                             }
                             for (let i = 0; i < bullet.length; i++) {
                                 if (Vector.magnitude(Vector.sub(bullet[i].position, this.position)) < this.radius + 40) {
@@ -2060,7 +2001,7 @@ const spawn = {
                             ctx.strokeStyle = `rgba(0,0,255,0.2)`;
                             ctx.lineWidth = 8
                             ctx.stroke();
-                            if (m.immuneCycle < m.cycle) m.takeDamage(0.00023 * spawn.dmgToPlayerByLevelsCleared());
+                            if (!(m.cycle % 10) && m.immuneCycle < m.cycle) m.takeDamage(0.0023 * spawn.dmgToPlayerByLevelsCleared());
                         }
                         for (let i = 0; i < bullet.length; i++) {
                             if (Vector.magnitude(Vector.sub(bullet[i].position, this.position)) < this.radius + 40) {
@@ -3078,7 +3019,7 @@ const spawn = {
             // if (!this.isSlashing && m.immuneCycle < m.cycle && Matter.Query.ray(map, this.position, m.pos).length === 0) this.sword = this.swordWaiting
             // }
             // this.sword() //does various things depending on what stage of the sword swing
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 //it goes too fast when it has no ring
                 Matter.Body.setVelocity(this, Vector.mult(this.velocity, 0.5))
                 this.invulnerableCount--
@@ -3350,7 +3291,7 @@ const spawn = {
             }
             this.attraction();
             this.sword() //does various things depending on what stage of the sword swing
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 //it goes too fast when it has no ring
                 Matter.Body.setVelocity(this, Vector.mult(this.velocity, 0.93))
                 this.delay++
@@ -3547,7 +3488,7 @@ const spawn = {
                 this.alwaysSeePlayer();
                 this.attraction();
             }
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 ctx.beginPath();
                 let vertices = this.vertices;
                 ctx.moveTo(vertices[0].x, vertices[0].y);
@@ -3636,7 +3577,7 @@ const spawn = {
                 this.alwaysSeePlayer();
                 this.attraction();
             }
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 ctx.beginPath();
                 let vertices = this.vertices;
                 ctx.moveTo(vertices[0].x, vertices[0].y);
@@ -3763,7 +3704,7 @@ const spawn = {
                     ctx.setLineDash([]);
                 }
             }
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 ctx.beginPath();
                 let vertices = this.vertices;
                 ctx.moveTo(vertices[0].x, vertices[0].y);
@@ -3836,7 +3777,7 @@ const spawn = {
             }
             this.attraction();
             this.sword() //does various things depending on what stage of the sword swing
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 ctx.beginPath();
                 let vertices = this.vertices;
                 ctx.moveTo(vertices[0].x, vertices[0].y);
@@ -4033,10 +3974,7 @@ const spawn = {
             me.foundPlayer();
         }
         me.damageReduction = 0.21
-        me.isInvulnerable = true
-        me.startingDamageReduction = me.damageReduction
-        me.damageReduction = 0
-        me.invulnerabilityCountDown = 30 + simulation.difficulty
+        mobs.statusInvincible(me, 30 + simulation.difficulty)
         me.onHit = function () { //run this function on hitting player
             if (powerUps.ejectTech()) {
                 powerUps.ejectGraphic("150, 138, 255");
@@ -4057,22 +3995,6 @@ const spawn = {
         };
         me.do = function () {
             if (this.seePlayer.recall) this.healthBar2()
-            if (this.isInvulnerable) {
-                if (this.invulnerabilityCountDown > 0) {
-                    this.invulnerabilityCountDown--
-                    ctx.beginPath();
-                    let vertices = this.vertices;
-                    ctx.moveTo(vertices[0].x, vertices[0].y);
-                    for (let j = 1; j < vertices.length; j++) ctx.lineTo(vertices[j].x, vertices[j].y);
-                    ctx.lineTo(vertices[0].x, vertices[0].y);
-                    ctx.lineWidth = 13 + 5 * Math.random();
-                    ctx.strokeStyle = `rgba(255,255,255,${0.5 + 0.2 * Math.random()})`;
-                    ctx.stroke();
-                } else {
-                    this.isInvulnerable = false
-                    this.damageReduction = this.startingDamageReduction
-                }
-            }
             // this.stroke = `hsl(0,0%,${80 + 25 * Math.sin(simulation.cycle * 0.01)}%)`
             // this.fill = `hsla(0,0%,${80 + 25 * Math.sin(simulation.cycle * 0.01)}%,0.3)`
 
@@ -4114,10 +4036,7 @@ const spawn = {
         }
 
         me.damageReduction = 0.23
-        me.isInvulnerable = true
-        me.startingDamageReduction = me.damageReduction
-        me.damageReduction = 0
-        me.invulnerabilityCountDown = 30 + simulation.difficulty
+        mobs.statusInvincible(me, 30 + simulation.difficulty)
 
         me.onHit = function () { //run this function on hitting player
             if (powerUps.ejectTech()) {
@@ -4153,22 +4072,6 @@ const spawn = {
         me.do = function () {
             if (this.seePlayer.recall) this.healthBar3()
             this.stroke = `hsl(0,0%,${80 + 25 * Math.sin(simulation.cycle * 0.01)}%)`
-            if (this.isInvulnerable) {
-                if (this.invulnerabilityCountDown > 0) {
-                    this.invulnerabilityCountDown--
-                    ctx.beginPath();
-                    let vertices = this.vertices;
-                    ctx.moveTo(vertices[0].x, vertices[0].y);
-                    for (let j = 1; j < vertices.length; j++) ctx.lineTo(vertices[j].x, vertices[j].y);
-                    ctx.lineTo(vertices[0].x, vertices[0].y);
-                    ctx.lineWidth = 13 + 5 * Math.random();
-                    ctx.strokeStyle = `rgba(255,255,255,${0.5 + 0.2 * Math.random()})`;
-                    ctx.stroke();
-                } else {
-                    this.isInvulnerable = false
-                    this.damageReduction = this.startingDamageReduction
-                }
-            }
             if (this.alive) {
                 for (let i = 0; i < Math.min(powerUp.length, this.vertices.length); i++) {
                     powerUp[i].collisionFilter.mask = 0
@@ -5505,18 +5408,13 @@ const spawn = {
         me.isBoss = true;
         me.damageReduction = 0.2  //normal is 1,  most bosses have 0.25
 
-        me.startingDamageReduction = me.damageReduction
-        me.isInvulnerable = false
         me.nextHealthThreshold = 0.75
-        me.invulnerableCount = 0
 
         me.onDamage = function () {
             if (this.health < this.nextHealthThreshold && this.alive) {
                 this.health = this.nextHealthThreshold - 0.01
                 this.nextHealthThreshold = Math.floor(this.health * 4) / 4
-                this.invulnerableCount = 60
-                this.isInvulnerable = true
-                this.damageReduction = 0
+                mobs.statusInvincible(this, 60)
 
                 //respawn mobs
                 this.ring()
@@ -5566,22 +5464,7 @@ const spawn = {
             this.searchSpring();
             this.checkStatus();
             this.springAttack();
-            if (this.isInvulnerable) {
-                this.invulnerableCount--
-                if (this.invulnerableCount < 0) {
-                    this.isInvulnerable = false
-                    this.damageReduction = this.startingDamageReduction
-                }
-                //draw invulnerable
-                ctx.beginPath();
-                let vertices = this.vertices;
-                ctx.moveTo(vertices[0].x, vertices[0].y);
-                for (let j = 1; j < vertices.length; j++) ctx.lineTo(vertices[j].x, vertices[j].y);
-                ctx.lineTo(vertices[0].x, vertices[0].y);
-                ctx.lineWidth = 13 + 5 * Math.random();
-                ctx.strokeStyle = `rgba(255,255,255,${0.5 + 0.2 * Math.random()})`;
-                ctx.stroke();
-            }
+
         };
 
         me.onDeath = function () {
@@ -5641,18 +5524,13 @@ const spawn = {
         me.isBoss = true;
         me.damageReduction = 0.1 //normal is 1,  most bosses have 0.25
 
-        me.startingDamageReduction = me.damageReduction
-        me.isInvulnerable = false
         me.nextHealthThreshold = 0.75
-        me.invulnerableCount = 0
 
         me.onDamage = function () {
             if (this.health < this.nextHealthThreshold && this.alive) {
                 this.health = this.nextHealthThreshold - 0.01
                 this.nextHealthThreshold = Math.floor(this.health * 4) / 4
-                this.invulnerableCount = 60
-                this.isInvulnerable = true
-                this.damageReduction = 0
+                mobs.statusInvincible(this, 60)
 
                 //respawn mobs
                 this.ring()
@@ -5673,22 +5551,7 @@ const spawn = {
             // this.gravity();
             this.attraction();
             this.checkStatus();
-            if (this.isInvulnerable) {
-                this.invulnerableCount--
-                if (this.invulnerableCount < 0) {
-                    this.isInvulnerable = false
-                    this.damageReduction = this.startingDamageReduction
-                }
-                //draw invulnerable
-                ctx.beginPath();
-                let vertices = this.vertices;
-                ctx.moveTo(vertices[0].x, vertices[0].y);
-                for (let j = 1; j < vertices.length; j++) ctx.lineTo(vertices[j].x, vertices[j].y);
-                ctx.lineTo(vertices[0].x, vertices[0].y);
-                ctx.lineWidth = 13 + 5 * Math.random();
-                ctx.strokeStyle = `rgba(255,255,255,${0.5 + 0.2 * Math.random()})`;
-                ctx.stroke();
-            }
+
         };
 
         me.onDeath = function () {
@@ -5783,7 +5646,7 @@ const spawn = {
 
             this.attraction();
             this.checkStatus();
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 this.invulnerableCount--
                 if (this.invulnerableCount < 0) {
                     this.isInvulnerable = false
@@ -5920,7 +5783,7 @@ const spawn = {
 
             this.attraction();
             this.checkStatus();
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 this.invulnerableCount--
                 if (this.invulnerableCount < 0) {
                     this.isInvulnerable = false
@@ -6187,18 +6050,13 @@ const spawn = {
         me.isBoss = true;
         me.damageReduction = 0.15  //normal is 1,  most bosses have 0.25
 
-        me.startingDamageReduction = me.damageReduction
-        me.isInvulnerable = false
         me.nextHealthThreshold = 0.75
-        me.invulnerableCount = 0
 
         me.onDamage = function () {
             if (this.health < this.nextHealthThreshold && this.alive) {
                 this.health = this.nextHealthThreshold - 0.01
                 this.nextHealthThreshold = Math.floor(this.health * 4) / 4
-                this.invulnerableCount = 90
-                this.isInvulnerable = true
-                this.damageReduction = 0
+                mobs.statusInvincible(this, 90)
 
                 //respawn mobs
                 this.ring()
@@ -6222,22 +6080,7 @@ const spawn = {
 
             this.attraction();
             this.checkStatus();
-            if (this.isInvulnerable) {
-                this.invulnerableCount--
-                if (this.invulnerableCount < 0) {
-                    this.isInvulnerable = false
-                    this.damageReduction = this.startingDamageReduction
-                }
-                //draw invulnerable
-                ctx.beginPath();
-                let vertices = this.vertices;
-                ctx.moveTo(vertices[0].x, vertices[0].y);
-                for (let j = 1; j < vertices.length; j++) ctx.lineTo(vertices[j].x, vertices[j].y);
-                ctx.lineTo(vertices[0].x, vertices[0].y);
-                ctx.lineWidth = 13 + 5 * Math.random();
-                ctx.strokeStyle = `rgba(255,255,255,${0.5 + 0.2 * Math.random()})`;
-                ctx.stroke();
-            }
+
         };
 
         me.onDeath = function () {
@@ -6699,7 +6542,7 @@ const spawn = {
             // this.seePlayerCheck()
             this.seePlayerByHistory()
             this.invulnerabilityCountDown--
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 if (this.invulnerabilityCountDown > 90 || this.invulnerabilityCountDown % 20 > 10) {
                     ctx.beginPath();
                     let vertices = this.vertices;
@@ -7452,7 +7295,7 @@ const spawn = {
             if (this.seePlayer.recall) this.healthBar3()
             this.seePlayerByHistory(50)
             this.checkStatus();
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 this.invulnerableCount--
                 if (this.invulnerableCount < 0) {
                     this.isInvulnerable = false
@@ -7612,7 +7455,7 @@ const spawn = {
             this.checkStatus();
             ctx.fillStyle = `hsla(${160 + 40 * Math.random()}, 100%, ${25 + 25 * Math.random() * Math.random()}%, 0.7)`;
 
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 this.invulnerableCount--
                 if (this.invulnerableCount < 0) {
                     this.isInvulnerable = false
@@ -8225,7 +8068,7 @@ const spawn = {
                 }
             }
             this.checkStatus();
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 this.invulnerableCount--
                 if (this.invulnerableCount < 0) {
                     this.isInvulnerable = false
@@ -8499,7 +8342,7 @@ const spawn = {
                 }
             }
             this.checkStatus();
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 this.invulnerableCount--
                 if (this.invulnerableCount < 0) {
                     this.isInvulnerable = false
@@ -8698,10 +8541,7 @@ const spawn = {
         Matter.Body.setDensity(me, 0.03); //extra dense //normal is 0.001 //makes effective life much larger
 
         me.damageReduction = 0.3
-        me.startingDamageReduction = me.damageReduction
-        me.isInvulnerable = false
         me.nextHealthThreshold = 0.75
-        me.invulnerableCount = 0
 
         spawn.shield(me, x, y, 1);
         spawn.spawnOrbitals(me, radius + 200 + 500 * Math.random(), 1)
@@ -8718,9 +8558,7 @@ const spawn = {
             if (this.health < this.nextHealthThreshold && this.alive) {
                 this.health = this.nextHealthThreshold - 0.01
                 this.nextHealthThreshold = Math.floor(this.health * 4) / 4
-                this.invulnerableCount = 90
-                this.isInvulnerable = true
-                this.damageReduction = 0
+                mobs.statusInvincible(this, 90)
             }
         };
         me.onHit = function () { };
@@ -8730,29 +8568,6 @@ const spawn = {
         me.fire = function () {
             if (this.seePlayer.recall) this.healthBar4()
             this.checkStatus();
-            if (this.isInvulnerable) {
-                // this.isFiring = false
-                this.invulnerableCount--
-                if (this.invulnerableCount < 0) {
-                    this.isInvulnerable = false
-                    this.damageReduction = this.startingDamageReduction
-                    //teleport
-                    // if (this.teleportLocations.length) {
-                    //     const where = this.teleportLocations[Math.floor(Math.random() * this.teleportLocations.length)]
-                    //     Matter.Body.setPosition(this, where)
-                    //     spawn.spawnOrbitals(me, radius + 200 + 300 * Math.random(), 1)
-                    // }
-                }
-                //draw invulnerable
-                ctx.beginPath();
-                let vertices = this.vertices;
-                ctx.moveTo(vertices[0].x, vertices[0].y);
-                for (let j = 1; j < vertices.length; j++) ctx.lineTo(vertices[j].x, vertices[j].y);
-                ctx.lineTo(vertices[0].x, vertices[0].y);
-                ctx.lineWidth = 13 + 5 * Math.random();
-                ctx.strokeStyle = `rgba(255,255,255,${0.5 + 0.2 * Math.random()})`;
-                ctx.stroke();
-            }
             if (this.isStunned) {
                 this.isFiring = false
             } else {
@@ -9169,17 +8984,12 @@ const spawn = {
         };
         Matter.Body.setDensity(me, 0.03); //extra dense //normal is 0.001 //makes effective life much larger
         me.damageReduction = 0.36
-        me.startingDamageReduction = me.damageReduction
-        me.isInvulnerable = false
         me.nextHealthThreshold = 0.75
-        me.invulnerableCount = 0
         me.onDamage = function () {
             if (this.health < this.nextHealthThreshold) {
                 this.health = this.nextHealthThreshold - 0.01
                 this.nextHealthThreshold = Math.floor(this.health * 4) / 4 //0.75,0.5,0.25
-                this.invulnerableCount = 90
-                this.isInvulnerable = true
-                this.damageReduction = 0
+                mobs.statusInvincible(this, 90)
                 this.laserDelay = 130
             }
         };
@@ -9314,22 +9124,7 @@ const spawn = {
             //add new laser to lasers array
             this.addLaser()
             this.fireLaser()
-            if (this.isInvulnerable) {
-                this.invulnerableCount--
-                if (this.invulnerableCount < 0) {
-                    this.isInvulnerable = false
-                    this.damageReduction = this.startingDamageReduction
-                }
-                //draw invulnerable
-                ctx.beginPath();
-                let vertices = this.vertices;
-                ctx.moveTo(vertices[0].x, vertices[0].y);
-                for (let j = 1; j < vertices.length; j++) ctx.lineTo(vertices[j].x, vertices[j].y);
-                ctx.lineTo(vertices[0].x, vertices[0].y);
-                ctx.lineWidth = 13 + 5 * Math.random();
-                ctx.strokeStyle = `rgba(255,255,255,${0.5 + 0.2 * Math.random()})`;
-                ctx.stroke();
-            }
+
         };
     },
     laser(x, y, radius = 30) {
@@ -9498,10 +9293,7 @@ const spawn = {
         me.tier = 4
         me.isBoss = true;
         me.damageReduction = 0.22
-        me.startingDamageReduction = me.damageReduction
-        me.isInvulnerable = false
         me.nextHealthThreshold = 0.857
-        me.invulnerableCount = 0
 
         Matter.Body.setDensity(me, 0.004); //extra dense //normal is 0.001 //makes effective life much larger
         me.vertices = Matter.Vertices.rotate(me.vertices, Math.PI, me.position); //make the pointy side of triangle the front
@@ -9531,9 +9323,7 @@ const spawn = {
             if (this.health < this.nextHealthThreshold) {
                 this.health = this.nextHealthThreshold - 0.01
                 this.nextHealthThreshold = Math.floor(this.health * 7) / 7 //0.75,0.5,0.25
-                this.invulnerableCount = 60
-                this.isInvulnerable = true
-                this.damageReduction = 0
+                mobs.statusInvincible(this, 60)
 
 
                 const colors = [
@@ -9620,22 +9410,7 @@ const spawn = {
                     }
                 }
             }
-            if (this.isInvulnerable) {
-                this.invulnerableCount--
-                if (this.invulnerableCount < 0) {
-                    this.isInvulnerable = false
-                    this.damageReduction = this.startingDamageReduction
-                }
-                //draw invulnerable
-                ctx.beginPath();
-                let vertices = this.vertices;
-                ctx.moveTo(vertices[0].x, vertices[0].y);
-                for (let j = 1; j < vertices.length; j++) ctx.lineTo(vertices[j].x, vertices[j].y);
-                ctx.lineTo(vertices[0].x, vertices[0].y);
-                ctx.lineWidth = 15 + 5 * Math.random();
-                ctx.strokeStyle = `rgba(255,255,255,${0.5 + 0.2 * Math.random()})`;
-                ctx.stroke();
-            }
+
         };
     },
     laserBaby(x, y, tier, color = "#f00", radius = 23) {
@@ -10245,7 +10020,7 @@ const spawn = {
                 this.damageReduction = 0
                 this.invulnerabilityCountDown = 106
             }
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 if (this.invulnerabilityCountDown > 0) {
                     this.invulnerabilityCountDown--
                     //draw invulnerability
@@ -10270,7 +10045,7 @@ const spawn = {
             this.seePlayerByHistory(60);
             this.attraction();
             //traveling laser
-            this.laserAngle += this.isInvulnerable ? 0.025 : 0.006
+            this.laserAngle += this.isPhaseInvulnerable ? 0.025 : 0.006
             for (let i = 0, len = this.vertices.length; i < len; i++) {
                 // this.laserSword(this.vertices[1], this.angle + laserAngle);
                 const bend = bendFactor * Math.cos(this.laserAngle + 2 * Math.PI * i / len)
@@ -10427,7 +10202,7 @@ const spawn = {
             }
         }
         const updateFlockInvulnerability = (who) => {
-            if (who.isInvulnerable && simulation.cycle >= who.flockInvulnerabilityEndCycle) {
+            if (who.isPhaseInvulnerable && simulation.cycle >= who.flockInvulnerabilityEndCycle) {
                 who.isInvulnerable = false
                 who.damageReduction = who.startingDamageReduction
                 who.fill = who.isFlockPlayerTarget ? playerTargetFill : flockFill
@@ -10821,7 +10596,7 @@ const spawn = {
                 if (Math.abs(this.velocity.x) < 11) Matter.Body.setVelocity(this, { x: this.velocity.x * 1.03, y: this.velocity.y });
             }
 
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 this.fireCount--
                 if (this.fireCount < 0) {
                     this.isInvulnerable = false
@@ -10922,7 +10697,7 @@ const spawn = {
                 if (Math.abs(this.velocity.x) < 11) Matter.Body.setVelocity(this, { x: this.velocity.x * 1.03, y: this.velocity.y });
             }
 
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 this.invulnerableCount--
                 if (this.invulnerableCount < 0) {
                     this.isInvulnerable = false
@@ -11002,7 +10777,7 @@ const spawn = {
                 if (Math.abs(this.velocity.x) < 7) Matter.Body.setVelocity(this, { x: this.velocity.x * 1.02, y: this.velocity.y });
             }
 
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 this.invulnerableCount--
                 if (this.invulnerableCount < 0) {
                     this.isInvulnerable = false
@@ -11073,10 +10848,7 @@ const spawn = {
         me.isReactorBoss = true;
         Matter.Body.setDensity(me, 0.001); //normal is 0.001
         me.damageReduction = 0.056
-        me.startingDamageReduction = me.damageReduction
-        me.isInvulnerable = false
         me.nextHealthThreshold = 0.75
-        me.invulnerableCount = 0
 
         me.cycle = 0
         me.inertia = Infinity;
@@ -11092,9 +10864,7 @@ const spawn = {
             if (this.health < this.nextHealthThreshold) {
                 this.health = this.nextHealthThreshold - 0.01
                 this.nextHealthThreshold = Math.floor(this.health * 4) / 4
-                this.invulnerableCount = 60 + simulation.difficulty * 1.5
-                this.isInvulnerable = true
-                this.damageReduction = 0
+                mobs.statusInvincible(this, 60 + simulation.difficulty * 1.5)
 
                 for (let i = 0, len = mob.length; i < len; ++i) { //trigger nearby mines
                     if (mob[i].isMine && Vector.magnitude(Vector.sub(this.position, mob[i].position)) < this.explodeRange) mob[i].isExploding = true
@@ -11129,22 +10899,7 @@ const spawn = {
                     Matter.Body.setVelocity(this, { x: this.velocity.x * 1.03, y: this.velocity.y });
                 }
             }
-            if (this.isInvulnerable) {
-                this.invulnerableCount--
-                if (this.invulnerableCount < 0) {
-                    this.isInvulnerable = false
-                    this.damageReduction = this.startingDamageReduction
-                }
-                //draw invulnerable
-                ctx.beginPath();
-                let vertices = this.vertices;
-                ctx.moveTo(vertices[0].x, vertices[0].y);
-                for (let j = 1; j < vertices.length; j++) ctx.lineTo(vertices[j].x, vertices[j].y);
-                ctx.lineTo(vertices[0].x, vertices[0].y);
-                ctx.lineWidth = 13 + 5 * Math.random();
-                ctx.strokeStyle = `rgba(255,255,255,${0.5 + 0.2 * Math.random()})`;
-                ctx.stroke();
-            }
+
             this.checkStatus();
             if (!(simulation.cycle % 15) && mob.length < 360 * (localSettings.isHideHUD ? 0.5 : 1)) spawn.mine(this.position.x, this.position.y)
         };
@@ -11392,7 +11147,7 @@ const spawn = {
                 me.accelMag = 0.1 //can't follow track above 1.1
                 if (this.seePlayer.recall) this.lostPlayer();
             }
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 this.invulnerableCount--
                 if (this.invulnerableCount < 0) {
                     this.isInvulnerable = false
@@ -11655,7 +11410,7 @@ const spawn = {
                 ctx.strokeStyle = "rgba(255, 255, 0, 0.15)";
                 ctx.stroke(); // Draw it
             }
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 this.invulnerableCount--
                 if (this.invulnerableCount < 0) {
                     this.isInvulnerable = false
@@ -13462,10 +13217,7 @@ const spawn = {
         me.isBoss = true;
         Matter.Body.setDensity(me, 0.0022 + 0.00015 * Math.sqrt(simulation.difficulty)); //extra dense //normal is 0.001 //makes effective life much larger
         me.damageReduction = 0.22
-        me.startingDamageReduction = me.damageReduction
-        me.isInvulnerable = false
         me.nextHealthThreshold = 0.75
-        me.invulnerableCount = 0
 
         me.accelMag = 0.0003;
         me.fireFreq = 240
@@ -13490,9 +13242,7 @@ const spawn = {
             if (this.health < this.nextHealthThreshold) {
                 this.health = this.nextHealthThreshold - 0.01
                 this.nextHealthThreshold = Math.floor(this.health * 4) / 4 //0.75,0.5,0.25
-                this.invulnerableCount = 60 + simulation.difficultyMode * 10
-                this.isInvulnerable = true
-                this.damageReduction = 0
+                mobs.statusInvincible(this, 60 + simulation.difficultyMode * 10)
 
                 for (let i = 0, len = 6; i < len; i++) {
                     spawn.grenade(this.position.x, this.position.y, this.tier);
@@ -13521,22 +13271,7 @@ const spawn = {
                     Matter.Body.setVelocity(mob[mob.length - 1], { x: this.velocity.x + velocity.x, y: this.velocity.y + velocity.y });
                 }
             }
-            if (this.isInvulnerable) {
-                this.invulnerableCount--
-                if (this.invulnerableCount < 0) {
-                    this.isInvulnerable = false
-                    this.damageReduction = this.startingDamageReduction
-                }
-                //draw invulnerable
-                ctx.beginPath();
-                let vertices = this.vertices;
-                ctx.moveTo(vertices[0].x, vertices[0].y);
-                for (let j = 1; j < vertices.length; j++) ctx.lineTo(vertices[j].x, vertices[j].y);
-                ctx.lineTo(vertices[0].x, vertices[0].y);
-                ctx.lineWidth = 15 + 5 * Math.random();
-                ctx.strokeStyle = `rgba(255,255,255,${0.5 + 0.2 * Math.random()})`;
-                ctx.stroke();
-            }
+
         };
     },
     grenadierBoss(x, y, radius = 95) {
@@ -13952,7 +13687,7 @@ const spawn = {
                         ctx.strokeStyle = `rgba(0,0,255,0.2)`;
                         ctx.lineWidth = 8
                         ctx.stroke();
-                        if (m.immuneCycle < m.cycle) m.takeDamage(0.00023 * spawn.dmgToPlayerByLevelsCleared());
+                        if (!(m.cycle % 10) && m.immuneCycle < m.cycle) m.takeDamage(0.0023 * spawn.dmgToPlayerByLevelsCleared());
                     }
                     for (let i = 0; i < bullet.length; i++) {
                         if (Vector.magnitude(Vector.sub(bullet[i].position, this.position)) < this.radius + 40) {
@@ -14177,7 +13912,7 @@ const spawn = {
             }
         }
         me.onDamage = function () {
-            if (!this.isInvulnerable) this.cycle = 0
+            if (!this.isPhaseInvulnerable) this.cycle = 0
             if (this.health < this.nextHealthThreshold && this.alive) {
                 this.health = this.nextHealthThreshold - 0.01
                 this.nextHealthThreshold = Math.floor(this.health * 4) / 4
@@ -14257,7 +13992,7 @@ const spawn = {
                 ctx.strokeStyle = "rgb(200,200,255)"
                 ctx.stroke();
             }
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 this.invulnerableCount--
                 if (this.invulnerableCount < 0) {
                     this.isInvulnerable = false
@@ -14738,7 +14473,7 @@ const spawn = {
             this.seePlayerCheck();
             this.checkStatus();
             this.attraction();
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 tail.draw("rgba(255, 0, 98, 0.6)");
                 this.invulnerableCount--
                 if (this.invulnerableCount < 0) {
@@ -14817,7 +14552,7 @@ const spawn = {
                     }
                 }
             }
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 ctx.beginPath();
                 let vertices = this.vertices;
                 ctx.moveTo(vertices[0].x, vertices[0].y);
@@ -14906,7 +14641,7 @@ const spawn = {
             this.attraction();
 
             let a //used to set the angle of wings
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 ctx.beginPath();
                 let vertices = this.vertices;
                 ctx.moveTo(vertices[0].x, vertices[0].y);
@@ -15082,7 +14817,7 @@ const spawn = {
             ctx.strokeStyle = "rgba(0,0,0,0.2)";
             ctx.stroke();
 
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 this.repulsion();
                 this.invulnerableCount--
                 if (this.invulnerableCount < 0) {
@@ -15183,7 +14918,7 @@ const spawn = {
         };
         me.do = function () {
             this.gravity();
-            if (this.isInvulnerable) {
+            if (this.isPhaseInvulnerable) {
                 this.repulsion();
                 this.invulnerableCount--
                 if (this.invulnerableCount < 0) {
@@ -15222,7 +14957,7 @@ const spawn = {
             Matter.Body.setDensity(me, 0.00001) //very low density to not mess with the original mob's motion
             me.stroke = "transparent";
             me.shield = true;
-            me.damageReduction = 0.073
+            me.damageReduction = 0.073 * (simulation.difficultyOptions.isStrongerConstraints ? 0.5 : 1)
             me.torqueMag = (0.00000005 + 0.00000001 * (Math.random() - 0.5)) * me.inertia
             me.isUnblockable = true
             me.collisionFilter.category = cat.mobShield

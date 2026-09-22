@@ -144,7 +144,7 @@ const simulation = {
     runEphemera() {
         // for (let i = 0; i < simulation.ephemera.length; i++) {
         for (let i = simulation.ephemera.length - 1; i >= 0; i--) {
-            simulation.ephemera[i].do();
+            simulation.ephemera[i]?.do(); //death can clear ephemera during a callback
         }
     },
     // timeMobSkip() {
@@ -210,13 +210,14 @@ const simulation = {
     buttonCD: 0,
     isHorizontalFlipped: false, //makes some maps flipped horizontally
     levelsCleared: 0,
-    difficultyMode: 2, //normal difficulty is 2
+    difficultyOptions: {}, //individual difficulty effects; initialized from saved settings
+    difficultyMode: 2, //derived numeric scale for legacy enemy tuning and community maps
     difficulty: 0,
     constraint: 0,
     healScale: 1,
     accelScale: null,
     CDScale: null,
-    molecularMode: Math.floor(4 * Math.random()), //0 spores, 1 missile, 2 ice IX, 3 drones //randomize molecular assembler field type
+    molecularMode: Math.floor(5 * Math.random()), //0 spores, 1 missile, 2 ice IX, 3 drones, 4 following needles //randomize molecular assembler field type
 
     drawCursor() {
         const size = 10;
@@ -243,13 +244,10 @@ const simulation = {
     drawCursorCoolDown() {
         const size = 10;
         ctx.lineWidth = 2;
-        ctx.strokeStyle = "#000"; //'rgba(0,0,0,0.4)'
+        ctx.strokeStyle = tech.isShotgunTiming && m.cycle < tech.shotgunTimingEndCycle ? "#f03" : "#000";
         ctx.beginPath();
         if (m.fireCDcycle > m.cycle) {
-            ctx.strokeStyle = "#000"; //'rgba(0,0,0,0.4)'
             ctx.arc(simulation.mouse.x, simulation.mouse.y, size + 1, 0, 2 * Math.PI);
-        } else {
-            ctx.strokeStyle = "#000"; //'rgba(0,0,0,0.4)'
         }
         ctx.moveTo(simulation.mouse.x - size, simulation.mouse.y);
         ctx.lineTo(simulation.mouse.x + size, simulation.mouse.y);
@@ -685,6 +683,7 @@ const simulation = {
         ctx.restore();
     },
     energyGenGraphic(totalCycles = 10 + Math.floor(Math.random() * 20)) {
+        if (m.immuneCycle >= m.cycle || m.isTimeDilated) return
         //energy generation animation
         if (!localSettings.isHideHUD) {
             simulation.ephemera.push({
@@ -827,6 +826,8 @@ const simulation = {
         } else {
             simulation.isTraining = false
         }
+        simulation.difficultyOptions = powerUps.difficulty.normalize(simulation.isTraining ? {} : localSettings.difficultyOptions)
+        powerUps.difficulty.updateScale()
         simulation.onTitlePage = false;
         // document.getElementById("choose-grid").style.display = "none"
         document.getElementById("choose-grid").style.visibility = "hidden"
@@ -984,7 +985,6 @@ const simulation = {
         }
         simulation.ephemera.push({
             name: "checks", count: 0, do() {
-
                 if (localSettings.showDmgNumbers && !(m.cycle % 30)) {
                     for (let i = 0; i < mob.length; i++) {
                         if (mob[i].dmgLog) {
@@ -1069,16 +1069,14 @@ const simulation = {
                     }
                     if (isNaN(player.position.x)) m.death();
                     if (m.lastKillCycle + 300 > m.cycle) { //effects active for 5 seconds after killing a mob
-                        if (tech.isEnergyRecovery && m.immuneCycle < m.cycle) {
-                            m.energy += m.maxEnergy * 0.05 * level.isReducedRegen
+                        if (tech.isEnergyRecovery) {
+                            m.addEnergy(m.maxEnergy * 0.05 * level.isReducedRegen)
                             for (let i = 0; i < 2; i++)simulation.energyGenGraphic()
                         }
                         if (tech.isHealthRecovery) {
                             if (tech.isEnergyHealth) {
-                                if (m.immuneCycle < m.cycle) {
-                                    m.energy += m.maxEnergy * 0.005 * level.isReducedRegen
-                                    simulation.energyGenGraphic()
-                                }
+                                m.addEnergy(m.maxEnergy * 0.005 * level.isReducedRegen)
+                                simulation.energyGenGraphic()
                             } else {
                                 const heal = 0.005 * m.maxHealth
                                 m.addHealth(heal)
@@ -1199,6 +1197,7 @@ const simulation = {
     },
     clearNow: false,
     clearMap() {
+        level.disableExit = false; //clear level-specific locks, including when starting a new run
         // level.mirrorDoors.reset();
         level.exit.reflection = null;
         level.exit.isInverted = false;
@@ -1225,18 +1224,17 @@ const simulation = {
                 simulation.updateGunHUD();
             }
 
-            if (tech.isMutualism && !tech.isEnergyHealth) {
+            if (tech.isMutualism) {
                 for (let i = 0; i < bullet.length; i++) {
                     if (bullet[i].isMutualismActive) {
-                        if (tech.isMutualism && this.isMutualismActive) {
-                            if (tech.isEnergyHealth) {
-                                m.energy += 0.01 + 0.01 * ((bullet[i].isSpore || bullet[i].isFlea) ? 0 : 1)
-                                simulation.energyGenGraphic()
-                            } else {
-                                m.health += 0.01 + 0.01 * ((bullet[i].isSpore || bullet[i].isFlea) ? 0 : 1)
-                                if (m.health > m.maxHealth) m.health = m.maxHealth;
-                                m.displayHealth();
-                            }
+                        const refund = bullet[i].isSpore ? 0.01 : 0.02
+                        bullet[i].isMutualismActive = false
+                        if (tech.isEnergyHealth) {
+                            m.addEnergy(refund)
+                            simulation.energyGenGraphic()
+                        } else {
+                            m.health = Math.min(m.maxHealth, m.health + refund)
+                            m.displayHealth();
                         }
                     }
                 }

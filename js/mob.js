@@ -30,6 +30,52 @@ const mobs = {
             }
         }
     },
+    statusInvincible(who, cycles = 30) {
+        if (!who.alive || cycles <= 0) return;
+        mobs.initializeInvulnerability(who);
+        const endCycle = simulation.cycle + cycles;
+        for (const status of who.status) {
+            if (status.type === "immune") {
+                status.endCycle = Math.max(status.endCycle, endCycle);
+                who.statusImmuneUntilCycle = status.endCycle;
+                return;
+            }
+        }
+        who.statusImmuneUntilCycle = endCycle;
+        who.status.push({
+            type: "immune",
+            endCycle,
+            effect() {
+                if (!who.alive || who.isPhaseInvulnerable || simulation.cycle >= this.endCycle) return;
+                // Scripted boss phases retain their own outline until migrated.
+                ctx.beginPath();
+                const vertices = who.vertices;
+                ctx.moveTo(vertices[0].x, vertices[0].y);
+                for (let i = 1; i < vertices.length; i++) ctx.lineTo(vertices[i].x, vertices[i].y);
+                ctx.closePath();
+                ctx.lineWidth = 13 + 5 * Math.random();
+                ctx.strokeStyle = `rgba(255,255,255,${0.5 + 0.2 * Math.random()})`;
+                ctx.stroke();
+            },
+            endEffect() {
+                if (who.statusImmuneUntilCycle === this.endCycle) who.statusImmuneUntilCycle = 0;
+            },
+        });
+    },
+    // Keep scripted boss phases independent of temporary status immunity.
+    // Leave damageReduction writable: regression and other effects multiply it during immunity.
+    initializeInvulnerability(who) {
+        if (Object.hasOwn(who, "isPhaseInvulnerable")) return;
+        who.isPhaseInvulnerable = !!who.isInvulnerable;
+        Object.defineProperties(who, {
+            isInvulnerable: {
+                configurable: true,
+                enumerable: true,
+                get() { return this.isPhaseInvulnerable || simulation.cycle < this.statusImmuneUntilCycle; },
+                set(value) { this.isPhaseInvulnerable = value; },
+            },
+        });
+    },
     statusSlow(who, cycles = 60) {
         applySlow(who)
         //look for mobs near the target
@@ -48,7 +94,7 @@ const mobs = {
         }
 
         function applySlow(whom) {
-            if (!whom.shield && !whom.isShielded && whom.alive) {
+            if (!whom.shield && !whom.isShielded && !whom.isInvulnerable && whom.alive) {
                 if (tech.isIceMaxHealthLoss && whom.health > 0.66 && whom.damageReduction > 0) whom.health = 0.66
                 if (tech.isIceKill && whom.health < 0.34 && whom.damageReduction > 0 && whom.alive) {
                     whom.damage(Infinity)
@@ -113,7 +159,7 @@ const mobs = {
         }
     },
     statusStun(who, cycles = 180) {
-        if (!who.shield && !who.isShielded) {
+        if (!who.shield && !who.isShielded && !who.isInvulnerable) {
             if (who.speed > 3) {
                 Matter.Body.setVelocity(who, {
                     x: who.velocity.x * 0.8,
@@ -172,15 +218,15 @@ const mobs = {
             })
         }
     },
-    statusDoT(who, tickDamage, cycles = 180) {
-        if (!who.isShielded && who.alive && who.damageReduction > 0) {
+    statusDoT(who, tickDamage, cycles = 180, isBypassShield = false) {
+        if ((!who.isShielded || isBypassShield) && !who.isInvulnerable && who.alive && who.damageReduction > 0) {
             if (who.status.length >= 20) {
                 let dotCount = 0;
                 let lastDot = null;
                 let mergedDot = null;
                 for (let i = 0; i < who.status.length; i++) {
                     const status = who.status[i];
-                    if (status.type === "dot") {
+                    if (status.type === "dot" && !!status.isBypassShield === !!isBypassShield) {
                         dotCount++;
                         lastDot = status;
                         if (status.stacks > 1) mergedDot = status;
@@ -217,6 +263,7 @@ const mobs = {
                 }
             }
             who.status.push({
+                isBypassShield,
                 effect() {
                     if (simulation.cycle >= this.startCycle && (simulation.cycle - this.startCycle) % 30 === 0) {
                         this.lastTickCycle = simulation.cycle;
@@ -228,7 +275,7 @@ const mobs = {
                             }
                             dmg *= 1 + 0.07 * stackCount;
                         }
-                        if (who.damageReduction === 0) {
+                        if (who.isInvulnerable || who.damageReduction === 0) {
                             this.endCycle = 0 //invulnerability clears radiation
                             simulation.drawList.push({ //add dmg to draw queue
                                 x: who.position.x + (Math.random() - 0.5) * who.radius * 0.5,
@@ -239,7 +286,7 @@ const mobs = {
                             });
                         } else {
                             // requestAnimationFrame(() => { who.damage(dmg) });
-                            who.damage(dmg);
+                            who.damage(dmg, this.isBypassShield);
                             simulation.drawList.push({ //add dmg to draw queue
                                 x: who.position.x + (Math.random() - 0.5) * who.radius * 0.5,
                                 y: who.position.y + (Math.random() - 0.5) * who.radius * 0.5,
@@ -1053,7 +1100,18 @@ const mobs = {
             dmgLog: 0, //used to record damage done to mob for producing damage numbers
             damage(dmg, isBypassShield = false, where = this.position, isDmgText = false) { //damage taken by this mob 
                 if ((!this.isShielded || isBypassShield) && this.alive) {
+                    //Temporary immunity also blocks damage callbacks and first-hit side effects.
+                    if (dmg !== Infinity && simulation.cycle < this.statusImmuneUntilCycle) return;
                     if (dmg !== Infinity) {
+                        if (
+                            tech.aperiodicTiling > 0 && !this.hasBlockedFirstHit &&
+                            (this.isDropPowerUp || this.isBoss) && !this.shield && !this.isMobBullet &&
+                            !this.isInvulnerable && this.damageReduction > 0 && dmg > 0 && Number.isFinite(dmg)
+                        ) {
+                            this.hasBlockedFirstHit = true;
+                            mobs.statusInvincible(this, tech.aperiodicTiling);
+                            return;
+                        }
                         dmg *= tech.damageAdjustments()
                         if (this.isDropPowerUp) {
                             if (this.health === 1) {
@@ -1192,11 +1250,11 @@ const mobs = {
                         }
                         if (tech.isFarAwayDmg) dmg *= 1 + Math.sqrt(Math.max(500, Math.min(3000, this.distanceToPlayer())) - 500) * 0.0067 //up to 33% dmg at max range of 3000
                         //energy and heal drain should be calculated after damage boosts and before mass reduction
-                        if (tech.energySiphon && this.isDropPowerUp && m.immuneCycle < m.cycle) {
+                        if (tech.energySiphon && this.isDropPowerUp) {
                             //dmg !== Infinity &&
                             const regen = Math.min(this.health, dmg) * tech.energySiphon * level.isReducedRegen
                             if (!isNaN(regen) && regen !== Infinity) {
-                                m.energy += regen //max regen is 0.04 with one stack of tech.energySiphon
+                                m.addEnergy(regen) //max regen is 0.04 with one stack of tech.energySiphon
                                 let cycles = Math.min(40, Math.floor(200 * regen))
                                 if (cycles > 0) {
                                     for (let i = 0; i < cycles; i++) simulation.energyGenGraphic()
@@ -1297,14 +1355,14 @@ const mobs = {
                 if (this.isDropPowerUp) {
                     if (m.alive && level.isMobDeathFreeze && !this.isFreezeAuraOnDeath) {
                         requestAnimationFrame(() => {
-                            spawn.freezeGrenade(this.position.x, this.position.y, this.tier, 60) //freezeGrenade(x, y, tier = null, lifeSpan = 90, pulseRadius = 230 + 10 * tier, size = 3) {
+                            spawn.freezeGrenade(this.position.x, this.position.y, this.tier, 55, (simulation.difficultyOptions.isStrongerConstraints) ? 333 : 200) //freezeGrenade(x, y, tier = null, lifeSpan = 90, pulseRadius = 230 + 10 * tier, size = 3) {
                         });
                     }
                     if (level.isMobDeathHeal) {
                         for (let i = 0; i < mob.length; i++) {
                             if (Vector.magnitudeSquared(Vector.sub(this.position, mob[i].position)) < 500000 && mob[i].alive) { //700
                                 if (mob[i].health < 1) {
-                                    mob[i].health += 0.33
+                                    mob[i].health += (simulation.difficultyOptions.isStrongerConstraints) ? 0.6 : 0.3
                                     if (mob[i].health > 1) mob[i].health = 1
                                     simulation.drawList.push({
                                         x: mob[i].position.x,
@@ -1346,7 +1404,7 @@ const mobs = {
                             });
                         }
                     }
-                    if (level.isMobRespawn && !this.isBoss && 0.25 > Math.random()) {
+                    if (level.isMobRespawn && !this.isBoss && (simulation.difficultyOptions.isStrongerConstraints ? 0.4 : 0.25) > Math.random()) {
                         simulation.drawList.push({
                             x: this.position.x,
                             y: this.position.y,
@@ -1372,7 +1430,7 @@ const mobs = {
                             spawn.randomMobByLevelsCleared(this.position.x, this.position.y);
                         }, 1000);
                     }
-                    if (tech.healSpawn && Math.random() < tech.healSpawn) {
+                    if (tech.healSpawn && Math.random() < tech.healSpawn * (tech.isCrystallography && powerUp.length === 0 ? 3 : 1)) {
                         powerUps.spawn(this.position.x + 20 * (Math.random() - 0.5), this.position.y + 20 * (Math.random() - 0.5), "heal");
                         simulation.drawList.push({
                             x: this.position.x,
@@ -1492,7 +1550,7 @@ const mobs = {
                     }
                     if (tech.isAddRemoveMaxHealth) {
                         if (!this.isBoss) {
-                            const amount = 0.005
+                            const amount = 0.01
                             if (tech.isEnergyHealth) {
                                 if (m.maxEnergy > amount) {
                                     tech.healMaxEnergyBonus -= amount
@@ -1670,6 +1728,7 @@ const mobs = {
             }
         });
         mob[i].alertRange2 = Math.pow(mob[i].radius * 3 + 550, 2);
+        mobs.initializeInvulnerability(mob[i]);
         Composite.add(engine.world, mob[i]); //add to world
     }
 };

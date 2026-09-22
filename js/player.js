@@ -292,6 +292,10 @@ const m = {
         m.moverX = 0 //reset the level mover offset
     },
     airControl() {
+        if (m.crouch && m.cycle % 30 === 0 && m.checkHeadClear()) {
+            m.undoCrouch();
+            m.yOffGoal = m.yOffWhen.jump;
+        }
         //check for coyote time jump
         if (input.up && m.buttonCD_jump + 20 < m.cycle && m.lastOnGroundCycle + m.coyoteCycles > m.cycle) { //&& (m.groundCount > 2 || Math.abs(player.velocity) > 8)
             // console.log("air", m.groundCount, player.speed, player.velocity)
@@ -411,6 +415,7 @@ const m = {
                 powerUps.spawn(m.pos.x, m.pos.y, tech.isBoostReplaceAmmo ? "boost" : "ammo", false)
                 powerUps.spawn(m.pos.x + 10, m.pos.y, "research", false)
                 powerUps.spawn(m.pos.x + 20, m.pos.y, "Casimir", false)
+                powerUps.spawn(m.pos.x + 30, m.pos.y, "qubit", false)
                 //random bullets
 
                 const where = m.pos
@@ -599,7 +604,7 @@ const m = {
     },
     addHealth(heal) {
         if (!tech.isEnergyHealth) {
-            heal *= simulation.healScale * (level.isLowHeal ? 0.5 : 1);
+            heal *= simulation.healScale * (level.isLowHeal ? (simulation.difficultyOptions.isStrongerConstraints ? 0.5 : 0.3) : 1);
             heal = Math.min(heal, m.maxHealth - m.health)
             m.health += heal
             // if (m.health > m.maxHealth) m.health = m.maxHealth;
@@ -612,8 +617,9 @@ const m = {
         m.maxHealth = m.baseHealth + tech.extraMaxHealth + 6 * tech.isFallingDamage
         m.maxHealth /= m.fieldUpgrades[1].energyHealthRatio
         if (level.isReducedHealth) {
-            level.reducedHealthLost = Math.max(0, m.health - m.maxHealth * 0.5)
-            m.maxHealth *= 0.5
+            const scale = (simulation.difficultyOptions.isStrongerConstraints) ? 0.3 : 0.6
+            level.reducedHealthLost = Math.max(0, m.health - m.maxHealth * scale)
+            m.maxHealth *= scale
         }
 
         document.getElementById("health-bg").style.width = `${Math.floor(300 * m.maxHealth)}px`
@@ -631,7 +637,6 @@ const m = {
     damageReduction: 1,
     defense() {
         let dmg = m.damageReduction * powerUps.difficulty.damageReduction
-        // if (tech.isEigenstate && m.eigen.count > 0) dmg *= 0.5
         if (tech.proportionality !== null) dmg *= Math.pow(tech.proportionality, 1.631)
         if (tech.energyDefense && m.energy > 1.99) dmg *= 0.1
         if (powerUps.boost.isDefense && powerUps.boost.endCycle > simulation.cycle) dmg *= 0.3
@@ -650,7 +655,6 @@ const m = {
         if (tech.isNoFireDefense && m.cycle > m.fireCDcycle + 120) dmg *= 0.3
         if (tech.isTurret && m.crouch) dmg *= 0.3;
         if (tech.isFirstDer && b.inventory[0] === b.activeGun) dmg *= 0.85 ** b.inventory.length
-        // if (tech.isLowHealthDefense) dmg *= Math.pow(0.3, Math.max(0, (tech.isEnergyHealth ? m.maxEnergy - m.energy : m.maxHealth - m.health)))
         if (tech.isLowHealthDefense) dmg *= Math.pow(0.2, Math.max(0, 1 - (tech.isEnergyHealth ? m.energy / m.maxEnergy : m.health / m.maxHealth)))
         if (tech.isRemineralize) {
             //reduce mineral percent based on time since last check
@@ -787,8 +791,11 @@ const m = {
         simulation.cycle--; //pause all functions that depend on game cycle increasing
     },
     collisionImmuneCycles: 30,
+    canRewindDamage(dmg) {
+        return tech.isRewindAvoidDeath && m.energy > 0.85 * Math.min(1, m.maxEnergy) && dmg > 0;
+    },
     takeDamage(dmg, isDefense = true) {
-        if (tech.isRewindAvoidDeath && (m.energy + 0.05) > Math.min(0.95, m.maxEnergy) && dmg > 0.01) {
+        if (m.canRewindDamage(dmg)) {
             const steps = Math.floor(Math.min(299, 150 * m.energy)) //150 * m.energy
             simulation.inGameConsole(`<span class='color-var'>m</span>.rewind(${steps})`)
             m.rewind(steps)
@@ -979,7 +986,7 @@ const m = {
                         color: "rgba(0,255,100,0.5)",
                         time: 10
                     });
-                    mob[i].health += dmg * 7
+                    mob[i].health += dmg * (simulation.difficultyOptions.isStrongerConstraints ? 10 : 5)
                     if (mob[i].health > 1) mob[i].health = 1
                 }
             }
@@ -1409,7 +1416,7 @@ const m = {
                 }
 
                 if (tech.isGrabEnergy && m.ledgeCoyote !== 0) {
-                    m.energy += 0.0068 * level.isReducedRegen * tech.isGrabEnergy
+                    m.addEnergy(0.0068 * level.isReducedRegen * tech.isGrabEnergy)
                     if (!(simulation.cycle % 12)) simulation.energyGenGraphic()
                 }
             }
@@ -3529,7 +3536,7 @@ const m = {
         player.collisionFilter.mask = cat.body | cat.map | cat.mob | cat.mobBullet | cat.mobShield
         m.airSpeedLimit = 125
         m.fieldFx = 1
-        // m.FxAir = 0.005
+        m.FxAir = 0.016
         m.fieldJump = 1
         m.setFieldRegen();
         m.setMovement();
@@ -3552,7 +3559,7 @@ const m = {
     setMaxEnergy(isMessage = true) {
         m.maxEnergy = (tech.isMaxEnergyTech ? 0.5 : 1) + tech.bonusEnergy + tech.healMaxEnergyBonus + tech.harmonicEnergy + 3 * tech.isGroundState + 1.5 * (m.fieldMode === 1) + (m.fieldMode === 0) * 0.01 * m.coupling + (m.fieldMode === 1) * 0.05 * m.coupling + tech.isStandingWaveExpand
         m.maxEnergy *= m.fieldUpgrades[1].energyHealthRatio / tech.inverseFireRate
-        if (level.isReducedEnergy) m.maxEnergy *= 0.5
+        if (level.isReducedEnergy) m.maxEnergy *= (simulation.difficultyOptions.isStrongerConstraints) ? 0.3 : 0.55
         if (isMessage) simulation.inGameConsole(`<span class='color-var'>m</span>.<span class='energy' data-help='energy'>maxEnergy</span> <span class='color-symbol'>=</span> ${(m.maxEnergy.toFixed(2))}`)
     },
     fieldMeterColor: "#0cf",
@@ -3660,12 +3667,15 @@ const m = {
             m.fieldRegen *= 0.66
         }
     },
+    addEnergy(amount) {
+        if (m.immuneCycle < m.cycle && !m.isTimeDilated) m.energy += amount;
+    },
     regenEnergy() { //used in drawRegenEnergy  // rewritten by some tech
-        if (m.immuneCycle < m.cycle && m.fieldCDcycle < m.cycle) m.energy += m.fieldRegen * level.isReducedRegen;
+        if (m.fieldCDcycle < m.cycle) m.addEnergy(m.fieldRegen * level.isReducedRegen);
         if (m.energy < 0) m.energy = 0
     },
     regenEnergyDefault() {
-        if (m.immuneCycle < m.cycle && m.fieldCDcycle < m.cycle) m.energy += m.fieldRegen * level.isReducedRegen;
+        if (m.fieldCDcycle < m.cycle) m.addEnergy(m.fieldRegen * level.isReducedRegen);
         if (m.energy < 0) m.energy = 0
     },
     lookingAt(who) {
@@ -4084,10 +4094,8 @@ const m = {
                 if (tech.isTokamak && m.throwCharge > 4 && !m.holdingTarget.isInvulnerable && !m.holdingTarget.isImmutable) { //remove the block body and pulse  in the direction you are facing
                     //m.throwCharge > 5 seems to be when the field full colors in a block you are holding
                     m.throwCycle = m.cycle + 180 //used to detect if a block was thrown in the last 3 seconds
-                    if (m.immuneCycle < m.cycle) {
-                        m.energy += 0.25 * Math.sqrt(m.holdingTarget.mass) * Math.min(5, m.throwCharge) * level.isReducedRegen
-                        for (let i = 0; i < 6; i++) simulation.energyGenGraphic()
-                    }
+                    m.addEnergy(0.25 * Math.sqrt(m.holdingTarget.mass) * Math.min(5, m.throwCharge) * level.isReducedRegen)
+                    for (let i = 0; i < 6; i++) simulation.energyGenGraphic()
                     m.throwCharge = 0;
                     m.definePlayerMass() //return to normal player mass
                     //remove block before pulse, so it doesn't get in the way
@@ -4575,7 +4583,7 @@ const m = {
                 m.pushMass(mob[i]);
 
                 if (tech.deflectEnergy && !mob[i].isInvulnerable && !mob[i].isShielded) {
-                    m.energy += tech.deflectEnergy * level.isReducedRegen
+                    m.addEnergy(tech.deflectEnergy * level.isReducedRegen)
                     simulation.energyGenGraphic()
                     simulation.energyGenGraphic()
                 }
@@ -4760,8 +4768,10 @@ const m = {
     fieldUpgrades: [
         {
             name: "field emitter",
-            description: `<em>initial field</em><br>use <strong class='energy' data-help='energy'>energy</strong> to <strong>deflect</strong> mobs and <strong>throw</strong> <strong class='block' data-help='block'>blocks</strong>
-        <br><strong>6</strong> <strong class='energy' data-help='energy'>energy</strong> per second`, //            <br><strong>100</strong> max <strong class='energy' data-help='energy'>energy</strong>
+            descriptionFunction() {
+                return `<em>initial field</em><br>use <strong class='energy' data-help='energy'>energy</strong> to <strong>deflect</strong> mobs and <strong>throw</strong> <strong class='block' data-help='block'>blocks</strong>
+        <br><strong>6</strong> <strong class='energy' data-help='energy'>energy</strong> per second`
+            }, //            <br><strong>100</strong> max <strong class='energy' data-help='energy'>energy</strong>
             effect: () => {
                 m.hold = function () {
                     if (m.isHolding) {
@@ -4787,9 +4797,11 @@ const m = {
         },
         {
             name: "standing wave",
-            description: `<strong>3</strong> oscillating <strong>shields</strong> are permanently active
+            descriptionFunction() {
+                return `<strong>3</strong> oscillating <strong>shields</strong> are permanently active
             <br><strong>+150</strong> max <strong class='energy' data-help='energy'>energy</strong>
-            <br><strong>6</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">←←↓→→↓</em>`,
+            <br><strong>6</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">←←↓→→↓</em>`
+            },
             keyLog: [null, null, null, null, null, null],
             energyHealthRatio: 1,
             drainCD: 0,
@@ -4924,7 +4936,9 @@ const m = {
         },
         {
             name: "perfect diamagnetism",
-            description: `<strong>deflecting</strong> does not drain <strong class='energy' data-help='energy'>energy</strong><br><strong>shield</strong> persists while inactive<br><strong>5</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">← → ← → ↧</em>`,
+            descriptionFunction() {
+                return `<strong>deflecting</strong> does not drain <strong class='energy' data-help='energy'>energy</strong><br><strong>shield</strong> persists while inactive<br><strong>5</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">← → ← → ↧</em>`
+            },
             keyLog: [null, null, null, null, null],
             effect: () => {
                 //store event function so it can be found and removed in m.setField()
@@ -5158,10 +5172,8 @@ const m = {
                             }
                             Matter.Body.setVelocity(player, { x: player.velocity.x, y: 0.98 * player.velocity.y });
                             if (tech.isFloatEnergy) {
-                                if (m.immuneCycle < m.cycle) {
-                                    m.energy += 12 * m.fieldRegen * level.isReducedRegen;
-                                    if (!(simulation.cycle % 6)) simulation.energyGenGraphic()
-                                }
+                                m.addEnergy(12 * m.fieldRegen * level.isReducedRegen);
+                                if (!(simulation.cycle % 6)) simulation.energyGenGraphic()
                             }
                         }
 
@@ -5213,9 +5225,9 @@ const m = {
                                         m.pickUp();
                                         m.throwCharge = 4//pre charge so player can throw immediately
 
-                                        if (tech.isReel && m.immuneCycle < m.cycle) {
+                                        if (tech.isReel) {
                                             const regen = Math.min(0.003 * m.holdingTarget.speed * m.holdingTarget.mass, 1) * level.isReducedRegen
-                                            m.energy += regen
+                                            m.addEnergy(regen)
                                             for (let i = 0; i < 2; i++)simulation.energyGenGraphic()
                                         }
                                         break
@@ -5291,7 +5303,9 @@ const m = {
         },
         {
             name: "negative mass",
-            description: `use <strong class='energy' data-help='energy'>energy</strong> to nullify &nbsp;<strong style='letter-spacing: 7px;'>gravity</strong><br><strong>0.5x</strong> <strong class='color-defense' data-help='defense'>damage taken</strong><br><strong>6</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">←↑→↑↑</em>`,
+            descriptionFunction() {
+                return `use <strong class='energy' data-help='energy'>energy</strong> to nullify &nbsp;<strong style='letter-spacing: 7px;'>gravity</strong><br><strong>0.5x</strong> <strong class='color-defense' data-help='defense'>damage taken</strong><br><strong>6</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">←↑→↑↑</em>`
+            },
             keyLog: [null, null, null, null, null],
             fieldDrawRadius: 0,
             effect: () => {
@@ -5493,11 +5507,10 @@ const m = {
         {
             name: "molecular assembler",
             modeText() {
-                return `${simulation.molecularMode === 0 ? "<strong class='spore' data-help='spore' style='letter-spacing: 2px;'>spores" : simulation.molecularMode === 1 ? "<strong>missiles" : simulation.molecularMode === 2 ? "<strong class='color-s' data-help='slow'>ice IX" : "<strong>drones"}</strong>`
+                return `${simulation.molecularMode === 0 ? "<strong class='spore' data-help='spore' style='letter-spacing: 2px;'>spores" : simulation.molecularMode === 1 ? "<strong>missiles" : simulation.molecularMode === 2 ? "<strong class='color-s' data-help='slow'>ice IX" : simulation.molecularMode === 3 ? "<strong>drones" : "<strong>needles"}</strong>`
             },
-            description: `use <strong class='energy' data-help='energy'>energy</strong> to <strong>deflect</strong> mobs<br>excess <strong class='energy' data-help='energy'>energy</strong> used to <strong class='color-print'>print</strong> ${simulation.molecularMode === 0 ? "<strong class='spore' data-help='spore' style='letter-spacing: 2px;'>spores" : simulation.molecularMode === 1 ? "<strong>missiles" : simulation.molecularMode === 2 ? "<strong class='color-s' data-help='slow'>ice IX" : "<strong>drones"}</strong><br><strong>12</strong> <strong class='energy' data-help='energy'>energy</strong> per second <em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↓→↓←↑↑↓</em>`,
-            setDescription() {
-                return `use <strong class='energy' data-help='energy'>energy</strong> to <strong>deflect</strong> mobs<br>excess <strong class='energy' data-help='energy'>energy</strong> used to <strong class='color-print'>print</strong> ${simulation.molecularMode === 0 ? "<strong class='spore' data-help='spore' style='letter-spacing: 2px;'>spores" : simulation.molecularMode === 1 ? "<strong>missiles" : simulation.molecularMode === 2 ? "<strong class='color-s' data-help='slow'>ice IX" : "<strong>drones"}</strong><br><strong>12</strong> <strong class='energy' data-help='energy'>energy</strong> per second <em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↓→↓←↑↑↓</em>`
+            descriptionFunction() {
+                return `use <strong class='energy' data-help='energy'>energy</strong> to <strong>deflect</strong> mobs<br>excess <strong class='energy' data-help='energy'>energy</strong> used to <strong class='color-print'>print</strong> ${simulation.molecularMode === 0 ? "<strong class='spore' data-help='spore' style='letter-spacing: 2px;'>spores" : simulation.molecularMode === 1 ? "<strong>missiles" : simulation.molecularMode === 2 ? "<strong class='color-s' data-help='slow'>ice IX" : simulation.molecularMode === 3 ? "<strong>drones" : "<strong>needles"}</strong><br><strong>12</strong> <strong class='energy' data-help='energy'>energy</strong> per second <em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↓→↓←↑↑↓</em>`
             },
             endoThermic(drain) {
                 if (tech.isEndothermic) {
@@ -5520,9 +5533,8 @@ const m = {
                     const arraysEqual = (a, b) => a.length === b.length && a.every((val, i) => val === b[i]);
                     if (arraysEqual(m.fieldUpgrades[4].keyLog, patternA) || arraysEqual(m.fieldUpgrades[4].keyLog, patternB)) {
                         //cycle to next molecular mode
-                        simulation.molecularMode = simulation.molecularMode < 3 ? simulation.molecularMode + 1 : 0
-                        m.fieldUpgrades[4].description = m.fieldUpgrades[4].setDescription()
-                        const name = `${simulation.molecularMode === 0 ? "<em class='spore' data-help='spore' style='letter-spacing: 2px;'>spores" : simulation.molecularMode === 1 ? "<em>missiles" : simulation.molecularMode === 2 ? "<em class='color-s' data-help='slow'>ice IX" : "<em>drones"}</em>`
+                        simulation.molecularMode = simulation.molecularMode < 4 ? simulation.molecularMode + 1 : 0
+                        const name = `${simulation.molecularMode === 0 ? "<em class='spore' data-help='spore' style='letter-spacing: 2px;'>spores" : simulation.molecularMode === 1 ? "<em>missiles" : simulation.molecularMode === 2 ? "<em class='color-s' data-help='slow'>ice IX" : simulation.molecularMode === 3 ? "<em>drones" : "<em>needles"}</em>`
                         simulation.inGameConsole(`simulation<span class='color-symbol'>.</span>molecularMode <span class='color-symbol'>=</span> ${simulation.molecularMode} // ${name} &nbsp; <em style="float: right;font-family: monospace;font-size: 1rem;color: #fff;">↓→↓←↑↑↓</em>`);
                     }
                     // console.log(event.code, m.fieldUpgrades[4].keyLog)
@@ -5599,6 +5611,17 @@ const m = {
                             m.energy -= drain;
                             b.iceIX(1)
                             m.fieldUpgrades[4].endoThermic(drain)
+                        } else if (simulation.molecularMode === 4) {
+                            const occupied = new Set();
+                            for (const shot of bullet) if (shot.isFollowingNeedle) occupied.add(shot.needleSlot);
+                            let slot = 0;
+                            while (occupied.has(slot)) slot++;
+                            const drain = 0.06 * (1 + Math.pow(2, 2.2 * Math.floor(slot / 9)));
+                            if (occupied.size < 36 && m.energy > drain) {
+                                m.energy -= drain;
+                                b.followingNeedle();
+                                m.fieldUpgrades[4].endoThermic(drain);
+                            }
                         } else if (simulation.molecularMode === 3) {
                             if (tech.isDroneRadioactive) {
                                 const drain = 0.9// + (Math.max(bullet.length, 150) - 150) * 0.01
@@ -5663,7 +5686,9 @@ const m = {
         },
         {
             name: "plasma torch",
-            description: `use <strong class='energy' data-help='energy'>energy</strong> to emit short range <strong class='color-plasma' data-help='plasma'>plasma</strong><br><strong>1.5x</strong> <strong class='color-d' data-help='damage'>damage</strong><br><strong>10</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style="float: right;font-family: monospace;font-size: 1rem;color: #fff;">←↓→→↧</em>`,
+            descriptionFunction() {
+                return `use <strong class='energy' data-help='energy'>energy</strong> to emit short range <strong class='color-plasma' data-help='plasma'>plasma</strong><br><strong>1.5x</strong> <strong class='color-d' data-help='damage'>damage</strong><br><strong>10</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style="float: right;font-family: monospace;font-size: 1rem;color: #fff;">←↓→→↧</em>`
+            },
             keyLog: [null, null, null, null, null],
             set() {
                 //store event function so it can be found and removed in m.setField()
@@ -5718,7 +5743,7 @@ const m = {
                                                     } else if (this.who) {
                                                         this.isReady = false
                                                         // requestAnimationFrame(() => {
-                                                        m.energy += 0.08
+                                                        m.addEnergy(0.08)
                                                         simulation.energyGenGraphic()
                                                         const dmg = 0.08
                                                         this.who.damage(dmg);
@@ -6126,7 +6151,9 @@ const m = {
         },
         {
             name: "time dilation",
-            description: `use <strong class='energy' data-help='energy'>energy</strong> to <strong style='letter-spacing: 2px;'>stop time</strong><br><strong>1.2x</strong> <strong class="color-speed" data-help="movement">movement</strong> and <strong><span class='color-fire-rate' data-help='fire-rate'>fire rate</span></strong><br><strong>12</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:0.8rem;color:#fff;">←↓→↑←↓→↑</em>`,
+            descriptionFunction() {
+                return `use <strong class='energy' data-help='energy'>energy</strong> to <strong style='letter-spacing: 2px;'>stop time</strong><br><strong>1.25x</strong> <strong class="color-speed" data-help="movement">movement</strong> and <strong><span class='color-fire-rate' data-help='fire-rate'>fire rate</span></strong><br><strong>12</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:0.8rem;color:#fff;">←↓→↑←↓→↑</em>`
+            },
             keyLog: [null, null, null, null, null, null, null, null],
             isRewindMode: false, //m.fieldUpgrades[6].isRewindMode
             isRewinding: false,
@@ -6342,7 +6369,9 @@ const m = {
         },
         {
             name: "metamaterial cloaking",
-            description: `<strong>0.6x</strong> <strong class='color-defense' data-help='defense'>damage taken</strong> and <strong class='color-d' data-help='damage'>damage</strong> while <strong class='color-cloaked' data-help='cloaking'>cloaked</strong><br>after <strong class='color-cloaked' data-help='cloaking'>decloaking</strong> <strong>4x</strong> <strong class='color-d' data-help='damage'>damage</strong> for <strong>2</strong> s<br><strong>6</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↑↓←↓→</em>`,
+            descriptionFunction() {
+                return `<strong>0.6x</strong> <strong class='color-defense' data-help='defense'>damage taken</strong> and <strong class='color-d' data-help='damage'>damage</strong> while <strong class='color-cloaked' data-help='cloaking'>cloaked</strong><br>after <strong class='color-cloaked' data-help='cloaking'>decloaking</strong> <strong>4x</strong> <strong class='color-d' data-help='damage'>damage</strong> for <strong>2</strong> s<br><strong>6</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↑↓←↓→</em>`
+            },
             keyLog: [null, null, null, null, null],
             smallFieldRadius: 110,
             effect: () => {
@@ -6511,7 +6540,9 @@ const m = {
         },
         {
             name: "pilot wave",
-            description: `use <strong class='energy' data-help='energy'>energy</strong> to guide <strong class='block' data-help='block'>blocks</strong><br><div class="circle-grid tech" data-help="orb-tech"></div> <div class="circle-grid gun" data-help="orb-gun"></div> <div class="circle-grid field" data-help="orb-field"></div> have <strong>+3</strong> <strong class='color-choice' data-help='choice'><span>ch</span><span>oi</span><span>ces</span></strong><br><strong>10</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↓↓→↓←↓↓</em>`,
+            descriptionFunction() {
+                return `use <strong class='energy' data-help='energy'>energy</strong> to guide <strong class='block' data-help='block'>blocks</strong><br><div class="circle-grid tech" data-help="orb-tech"></div> <div class="circle-grid gun" data-help="orb-gun"></div> <div class="circle-grid field" data-help="orb-field"></div> have <strong>+3</strong> <strong class='color-choice' data-help='choice'><span>ch</span><span>oi</span><span>ces</span></strong><br><strong>10</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↓↓→↓←↓↓</em>`
+            },
             keyLog: [null, null, null, null, null, null, null],
             collider: null,
             fieldMass: 1,
@@ -6821,7 +6852,12 @@ const m = {
         },
         {
             name: "wormhole",
-            description: `use <strong>16</strong> <strong class='energy' data-help='energy'>energy</strong> to enter a <strong class='color-worm' data-help='wormhole'>wormhole</strong><br><strong>+8%</strong> chance to <strong class='color-dup' data-help='duplicate'>duplicate</strong> <strong>power ups</strong><br><strong>8</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↓↓↓↑↓</em>`,
+            energyCost() {
+                return (tech.isFreeWormHole ? 0.02 : 0.16) + (tech.manifoldCost ?? 0)
+            },
+            descriptionFunction() {
+                return `use <strong>${(100 * this.energyCost()).toFixed(0)}</strong> <strong class='energy' data-help='energy'>energy</strong> to enter a <strong class='color-worm' data-help='wormhole'>wormhole</strong><br><strong>+8%</strong> chance to <strong class='color-dup' data-help='duplicate'>duplicate</strong> <strong>power ups</strong><br><strong>8</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↓↓↓↑↓</em>`
+            },
             keyLog: [null, null, null, null, null],
             drain: 0,
             effect: function () {
@@ -6832,7 +6868,7 @@ const m = {
                     const patternA = ["ArrowDown", "ArrowDown", "ArrowDown", "ArrowUp", "ArrowDown"]
                     const patternB = [input.key.down, input.key.down, input.key.down, input.key.up, input.key.down,]
                     const arraysEqual = (a, b) => a.length === b.length && a.every((val, i) => val === b[i]);
-                    const drain = (tech.isFreeWormHole ? 0.02 : 0.16) + tech.manifoldCost
+                    const drain = m.fieldUpgrades[9].energyCost()
                     if (m.energy > drain && arraysEqual(m.fieldUpgrades[9].keyLog, patternA) || arraysEqual(m.fieldUpgrades[9].keyLog, patternB)) {
                         m.energy -= drain
                         const rayResults = Matter.Query.ray(map, m.pos, { x: m.pos.x, y: m.pos.y - 10000 }, 50)
@@ -6986,8 +7022,8 @@ const m = {
                                                 Matter.Composite.remove(engine.world, body[i]);
                                                 body.splice(i, 1);
                                                 m.fieldRange *= 0.8
-                                                if (m.immuneCycle < m.cycle && m.coupling > 0) {
-                                                    m.energy += 0.03 * m.coupling * level.isReducedRegen
+                                                if (m.coupling > 0) {
+                                                    m.addEnergy(0.03 * m.coupling * level.isReducedRegen)
                                                     for (let i = 0, len = Math.min(15, m.coupling / 5); i < len; i++)simulation.energyGenGraphic()
                                                 }
                                                 if (tech.isWormholeWorms) { //pandimensional spermia
@@ -7020,10 +7056,8 @@ const m = {
                                             Matter.Composite.remove(engine.world, body[i]);
                                             body.splice(i, 1);
                                             m.fieldRange *= 0.8
-                                            if (m.immuneCycle < m.cycle) {
-                                                m.energy += 0.03 * m.coupling * level.isReducedRegen
-                                                for (let i = 0, len = Math.min(15, m.coupling / 5); i < len; i++)simulation.energyGenGraphic()
-                                            }
+                                            m.addEnergy(0.03 * m.coupling * level.isReducedRegen)
+                                            for (let i = 0, len = Math.min(15, m.coupling / 5); i < len; i++)simulation.energyGenGraphic()
                                             if (tech.isWormholeWorms) { //pandimensional spermia
                                                 for (let i = 0, len = 1 + Math.floor(4 * Math.random()); i < len; i++) {
                                                     b.worm(Vector.add(m.hole.pos2, Vector.rotate({ x: m.fieldRange * 0.4, y: 0 }, 2 * Math.PI * Math.random())))
@@ -7109,7 +7143,7 @@ const m = {
                             }
 
                             m.grabPowerUp();
-                            this.drain = (tech.isFreeWormHole ? 0.02 : 0.16) + tech.manifoldCost
+                            this.drain = m.fieldUpgrades[9].energyCost()
                             const unit = Vector.perp(Vector.normalise(sub))
                             const where = { x: m.pos.x + 30 * Math.cos(m.angle), y: m.pos.y + 30 * Math.sin(m.angle) }
                             m.fieldRange = 0.97 * m.fieldRange + 0.03 * (50 + 10 * Math.sin(simulation.cycle * 0.025))
@@ -7186,12 +7220,18 @@ const m = {
                                 m.hole.angle = Math.atan2(sub.y, sub.x)
                                 m.hole.unit = Vector.perp(Vector.normalise(sub))
 
-                                if (tech.isWormholeDamage) {
-                                    who = Matter.Query.ray(mob, m.pos, simulation.mouseInGame, 100)
-                                    for (let i = 0; i < who.length; i++) {
-                                        if (who[i].body.alive) {
-                                            mobs.statusDoT(who[i].body, 1, 420)
-                                            mobs.statusStun(who[i].body, 360)
+                                if (tech.isWormholeDamage || tech.isSpaghettification) {
+                                    const hits = Matter.Query.ray(mob, m.pos, simulation.mouseInGame, 100);
+                                    // Cosmic string's 420 cycles produce 14 base radiation ticks.
+                                    for (let i = 0; i < hits.length; i++) {
+                                        const target = hits[i].body;
+                                        if (target.alive) {
+                                            if (tech.isSpaghettification) {
+                                                if (!target.isInvulnerable) target.damage(16 * Vector.magnitude(sub) / 1000);
+                                            } else {
+                                                mobs.statusDoT(target, 1, 420);
+                                                mobs.statusStun(target, 360);
+                                            }
                                         }
                                     }
                                 }
@@ -7306,7 +7346,9 @@ const m = {
         },
         {
             name: "grappling hook",
-            description: `use <strong class='energy' data-help='energy'>energy</strong> to fire a hook that <strong>pulls</strong> you<br><strong>0.5x</strong> <strong class='color-defense' data-help='defense'>damage taken</strong><br><strong>9</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↑↑↓↓</em>`,
+            descriptionFunction() {
+                return `use <strong class='energy' data-help='energy'>energy</strong> to fire a hook that <strong>pulls</strong> you<br><strong>0.5x</strong> <strong class='color-defense' data-help='defense'>damage taken</strong><br><strong>9</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↑↑↓↓</em>`
+            },
             keyLog: [null, null, null, null],
             effect: () => {
                 //store event function so it can be found and removed in m.setField()
@@ -7735,18 +7777,19 @@ const m = {
                                 ) {
                                     mob[k].foundPlayer();
                                     let dmg = Math.min(Math.max(0.025 * Math.sqrt(mob[k].mass), 0.05), 0.3) * mob[k].damageScale();
-                                    if (tech.isRewindAvoidDeath && (m.energy + 0.05) > Math.min(0.95, m.maxEnergy) && dmg > 0.01) { //CPT reversal runs in m.damage, but it stops the rest of the collision code here too
+                                    if (m.canRewindDamage(dmg)) { //CPT reversal runs in m.takeDamage, but it stops the rest of the collision code here too
                                         m.takeDamage(dmg);
                                         return
                                     }
                                     m.takeDamage(dmg);
                                     if (tech.isPiezo) {
-                                        m.energy += 20.48 * level.isReducedRegen;
+                                        m.addEnergy(20.48 * level.isReducedRegen);
                                         for (let i = 0; i < 6; i++)simulation.energyGenGraphic()
                                     }
                                     if (tech.isStimulatedEmission) powerUps.ejectTech()
                                     if (mob[k].onHit) mob[k].onHit();
                                     if (m.immuneCycle < m.cycle + m.collisionImmuneCycles) m.immuneCycle = m.cycle + m.collisionImmuneCycles; //player is immune to damage for 30 cycles
+                                    if (tech.isExplodeContact) b.explosion(player.position, 300);
                                     //extra kick between player and mob              //this section would be better with forces but they don't work...
                                     let angle = Math.atan2(player.position.y - mob[k].position.y, player.position.x - mob[k].position.x);
                                     Matter.Body.setVelocity(player, {

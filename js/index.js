@@ -261,6 +261,15 @@ window.addEventListener('load', async () => {
     if (Object.keys(set).length !== 0) {
         // build.populateGrid() //trying to solve a bug with this, but maybe it doesn't help
         await openExperimentMenu();
+        //Restore custom options before applying the shared build.
+        if (/^(?:v2:[01]{13,15}|[01]{11,13})$/.test(set.difficultyOptions || '')) {
+            simulation.difficultyOptions = powerUps.difficulty.fromSignature(set.difficultyOptions);
+        } else if (set.difficulty !== undefined) {
+            simulation.difficultyOptions = powerUps.difficulty.fromLegacy(set.difficulty);
+        }
+        localSettings.difficultyOptions = { ...simulation.difficultyOptions };
+        powerUps.difficulty.updateScale();
+        powerUps.difficulty.setDamageAndDefense();
         //add experimental selections based on url
         for (const property in set) {
             set[property] = set[property].replace(/%20/g, " ")
@@ -301,10 +310,9 @@ window.addEventListener('load', async () => {
             if (property === "molMode") {
                 simulation.molecularMode = Number(set[property])
                 const i = 4 //update experiment text
-                m.fieldUpgrades[i].description = m.fieldUpgrades[i].setDescription()
                 document.getElementById(`field-${i}`).innerHTML = `<div class="card-text">
                 <div class="grid-title"><div class="circle-grid-title field"></div> &nbsp; ${build.nameLink(m.fieldUpgrades[i].name)}</div>
-                ${m.fieldUpgrades[i].description}</div>`
+                ${m.fieldUpgrades[i].descriptionFunction()}</div>`
             }
             requestAnimationFrame(() => { build.sortTech('have', true) });
 
@@ -525,16 +533,10 @@ ${fullscreenWarning}
 <details id="difficulty-parameters-details" style="padding: 0 8px;">
 <summary>difficulty parameters</summary>
 <div class="pause-details">
-        ${simulation.difficultyMode > 0 ? `<div class="pause-difficulty-row">spawn higher <strong class="color-tier">TIER</strong> mobs<br>after every <strong>4</strong> levels</div>` : " "}
-        ${simulation.difficultyMode > 1 ? `<div class="pause-difficulty-row"><strong>0.5x</strong> <strong class='color-d' data-help='damage'>damage</strong><br><strong>2x</strong> <strong class='color-defense' data-help='defense'>damage taken</strong></div>` : " "}
-        ${simulation.difficultyMode > 2 ? `<div class="pause-difficulty-row">spawn a <strong>2nd boss</strong><br>bosses spawn <strong>fewer</strong> ${powerUps.orb.tech()}</div>` : " "}
-        ${simulation.difficultyMode > 3 ? `<div class="pause-difficulty-row">increase mob <strong class="color-tier">TIER</strong><br>after every <strong>3</strong> levels</div>` : " "}
-        ${simulation.difficultyMode > 4 ? `<div class="pause-difficulty-row"><strong>+1</strong> random <strong class="constraint">constraint</strong><br>fewer initial <strong>power ups</strong></div>` : " "}
-        ${simulation.difficultyMode > 5 ? `<div class="pause-difficulty-row"><strong>0.5x</strong> <strong class='color-d' data-help='damage'>damage</strong><br><strong>2x</strong> <strong class='color-defense' data-help='defense'>damage taken</strong></div>` : " "}
-        ${simulation.difficultyMode > 6 ? `<div class="pause-difficulty-row"><strong>+1</strong> random <strong class="constraint">constraint</strong><br>fewer ${powerUps.orb.tech()} spawn</div>` : " "}
+        ${powerUps.difficulty.pauseText()}
 </div>
 </details>
-${simulation.difficultyMode > 4 ? `<details id="constraints-details" style="padding: 0 8px;"><summary>active constraints</summary><div class="pause-details"><span class="constraint">${level.constraintDescription1}<br>${level.constraintDescription2}</span></div></details>` : ""}
+${simulation.difficultyOptions.isConstraint ? `<details id="constraints-details" style="padding: 0 8px;"><summary>active constraint</summary><div class="pause-details"><span class="constraint">${level.constraintDescription1}</span></div></details>` : ""}
 </div>`
         text += `<div class="pause-grid-module card-background" style="height:auto;">
 <details id = "console-log-details" style="padding: 0 8px;">
@@ -548,7 +550,7 @@ ${simulation.difficultyMode > 4 ? `<details id="constraints-details" style="padd
         text += `<div class="pause-grid-module card-background" id="pause-field" ${style}>
 <div class="card-text">
 <div class="grid-title"><div class="circle-grid-title field" onclick="speechHandler.speech('${m.fieldUpgrades[m.fieldMode].name}')"></div> &nbsp; ${build.nameLink(m.fieldUpgrades[m.fieldMode].name)}</div>
-${m.fieldUpgrades[m.fieldMode].description}</div> </div>`
+${m.fieldUpgrades[m.fieldMode].descriptionFunction()}</div> </div>`
         // }
         for (let i = 0, len = b.inventory.length; i < len; i++) {
             const style = `style="height:auto;"`
@@ -877,11 +879,10 @@ ${b.guns[b.inventory[i]].descriptionFunction()}</div> </div>`
             } else if (m.fieldMode === 4) {
                 const i = 4 //update experiment text
                 simulation.molecularMode++
-                if (simulation.molecularMode > i - 1) simulation.molecularMode = 0
-                m.fieldUpgrades[i].description = m.fieldUpgrades[i].setDescription()
+                if (simulation.molecularMode > 4) simulation.molecularMode = 0
                 document.getElementById(`field-${i}`).innerHTML = `<div class="card-text">
                                 <div class="grid-title"><div class="circle-grid-title field"></div> &nbsp; ${build.nameLink(m.fieldUpgrades[i].name)}</div>
-                                ${m.fieldUpgrades[i].description}</div>`
+                                ${m.fieldUpgrades[i].descriptionFunction()}</div>`
             }
         } else if (type === "tech") {
             if (tech.tech[index].count < tech.tech[index].maxCount) {
@@ -1006,7 +1007,7 @@ ${b.guns[b.inventory[i]].descriptionFunction()}</div> </div>`
             text += `<div id="field-${i}" class="experiment-grid-module card-background ${m.fieldMode === i ? " build-field-selected" : ""}" onclick="build.choosePowerUp(${i},'field');" ${hideStyle} >
                             <div class="card-text">
                                 <div class="grid-title"><div class="circle-grid-title field" onclick="speechHandler.speech('${m.fieldUpgrades[i].name}')"></div> &nbsp; ${build.nameLink(m.fieldUpgrades[i].name)}</div>
-                                ${m.fieldUpgrades[i].description}</div> </div>`
+                                ${m.fieldUpgrades[i].descriptionFunction()}</div> </div>`
         }
         for (let i = 0, len = b.guns.length; i < len; i++) {
             text += `<div id="gun-${i}" class="experiment-grid-module card-background ${b.guns[i].have ? " build-gun-selected" : ""}" onclick="build.choosePowerUp(${i},'gun')" ${hideStyle} >
@@ -1108,12 +1109,11 @@ ${b.guns[b.inventory[i]].descriptionFunction()}</div> </div>`
         url += `&molMode=${encodeURIComponent(simulation.molecularMode)}`
         // if (property === "molMode") {
         //     simulation.molecularMode = Number(set[property])
-        //     m.fieldUpgrades[i].description = m.fieldUpgrades[i].setDescription()
-        //     document.getElementById(`field-${i}`).innerHTML = `<div class="grid-title"><div class="circle-grid field"></div> &nbsp; ${build.nameLink(m.fieldUpgrades[i].name)}</div> ${m.fieldUpgrades[i].description}`
+        //     document.getElementById(`field-${i}`).innerHTML = `<div class="grid-title"><div class="circle-grid field"></div> &nbsp; ${build.nameLink(m.fieldUpgrades[i].name)}</div> ${m.fieldUpgrades[i].descriptionFunction()}`
         // }
 
         url += `&field=${encodeURIComponent(m.fieldUpgrades[m.fieldMode].name.trim())}`
-        url += `&difficulty=${simulation.difficultyMode}`
+        url += `&difficultyOptions=${powerUps.difficulty.signature()}`
         if (isCustom) {
             // url += `&level=${Math.abs(Number(document.getElementById("starting-level").value))}`
             // alert('n-gon build URL copied to clipboard.\nPaste into browser address bar.')
@@ -1448,7 +1448,11 @@ window.addEventListener("keydown", function (event) {
                 input.isPauseKeyReady = false
                 setTimeout(function () { input.isPauseKeyReady = true }, 300);
                 if (simulation.isChoosing) {
-                    build.pauseGrid()
+                    if (document.getElementById("pause-grid-left").style.display === "none") {
+                        build.pauseGrid()
+                    } else {
+                        build.unPauseGrid()
+                    }
                 } else if (simulation.paused) {
                     if (document.activeElement !== document.getElementById('sort-input')) {
                         build.unPauseGrid()
@@ -1571,7 +1575,7 @@ window.addEventListener("keydown", function (event) {
             break
         case input.key.testing:
             if (m.alive && localSettings.loreCount > 0 && !simulation.paused && !build.isExperimentSelection) {
-                if (simulation.difficultyMode > 5) {
+                if (simulation.difficultyMode > 6) {
                     simulation.inGameConsole("<em>testing mode disabled for this difficulty</em>");
                     break
                 }
@@ -1760,6 +1764,12 @@ window.addEventListener("keydown", function (event) {
                 m.energy = m.maxEnergy
                 break
             case "y":
+                if (simulation.testing) {
+                    simulation.testing = false;
+                    simulation.loop = simulation.normalLoop
+                    if (simulation.isConstructionMode) document.getElementById("construct").style.display = 'none'
+                    simulation.inGameConsole("", 0);
+                }
                 simulation.paused = true;
                 build.isExperimentSelection = true;
                 build.populateGrid();
@@ -2012,6 +2022,7 @@ if (localStorageCheck()) {
     }
 }
 
+const hadSavedFpsPreference = localSettings.fpsCapDefault !== undefined
 if (localSettings.isAllowed && !localSettings.isEmpty) {
     console.log('restoring previous settings')
 
@@ -2068,8 +2079,7 @@ if (localSettings.isAllowed && !localSettings.isEmpty) {
     }
 
     if (localSettings.difficultyMode === undefined) localSettings.difficultyMode = "2"
-    simulation.difficultyMode = localSettings.difficultyMode
-    lore.setTechGoal()
+    //Individual selections are restored below, after default settings are initialized.
 
     if (localSettings.pauseMenuDetailsOpen === undefined) {
         localSettings.pauseMenuDetailsOpen = [true, false, false, true, false]
@@ -2094,6 +2104,7 @@ if (localSettings.isAllowed && !localSettings.isEmpty) {
         difficultyMode: '2',
         difficultyCompleted: [null, false, false, false, false, false, false, false],
         fpsCapDefault: 'max',
+        estimatedDisplayFps: null,
         runCount: 0,
         isTrainingNotAttempted: true,
         levelsClearedLastGame: 0,
@@ -2114,6 +2125,10 @@ if (localSettings.isAllowed && !localSettings.isEmpty) {
     document.getElementById("fps-select").value = localSettings.fpsCapDefault
     document.getElementById("banned").value = localSettings.banList
 }
+simulation.difficultyOptions = localSettings.difficultyOptions ? powerUps.difficulty.normalize(localSettings.difficultyOptions) : powerUps.difficulty.fromLegacy(localSettings.difficultyMode);
+localSettings.difficultyOptions = { ...simulation.difficultyOptions };
+powerUps.difficulty.updateScale();
+lore.setTechGoal();
 document.getElementById("control-testing").style.visibility = (localSettings.loreCount === 0) ? "hidden" : "visible"
 // document.getElementById("experiment-button").style.visibility = (localSettings.loreCount === 0) ? "hidden" : "visible"
 input.controlTextUpdate()
@@ -2127,7 +2142,54 @@ if (simulation.isCommunityMaps) {
 // settings
 //**********************************************************************
 
+let hasExplicitFpsPreference = hadSavedFpsPreference
+function detectDisplayFps() {
+    if (Number.isFinite(localSettings.estimatedDisplayFps) && localSettings.estimatedDisplayFps > 0) return
+    localSettings.estimatedDisplayFps = null
+    let previous
+    let warmup = 5
+    const intervals = []
+    function sample(timestamp) {
+        if (!simulation.onTitlePage) return
+        if (document.hidden) {
+            previous = undefined
+            warmup = 5
+            intervals.length = 0
+        } else {
+            if (previous !== undefined) {
+                const interval = timestamp - previous
+                if (warmup > 0) {
+                    warmup--
+                } else if (interval > 0) {
+                    intervals.push(interval)
+                }
+            }
+            previous = timestamp
+            if (intervals.length === 30) {
+                intervals.sort((a, b) => a - b)
+                const median = (intervals[14] + intervals[15]) / 2
+                localSettings.estimatedDisplayFps = Math.round(1000 / median)
+                if (!hasExplicitFpsPreference) {
+                    localSettings.fpsCapDefault = median < 15 ? '60' : 'max'
+                    simulation.fpsCapDefault = median < 15 ? 60 : 999999999
+                    document.getElementById("fps-select").value = localSettings.fpsCapDefault
+                }
+                if (localSettings.isAllowed) localStorage.setItem("localSettings", JSON.stringify(localSettings))
+                return
+            }
+        }
+        requestAnimationFrame(sample)
+    }
+    requestAnimationFrame(sample)
+}
+if (document.readyState === 'complete') {
+    detectDisplayFps()
+} else {
+    window.addEventListener('load', detectDisplayFps, { once: true })
+}
+
 document.getElementById("fps-select").addEventListener("input", () => {
+    hasExplicitFpsPreference = true
     let value = document.getElementById("fps-select").value
     if (value === 'max') {
         simulation.fpsCapDefault = 999999999;
