@@ -495,7 +495,7 @@ const tech = {
             tech.zeitgeistRemoveName = value
         },
         nonDemolition(value) {
-            const entry = tech.tech.find(item => item.name === "quantum non-demolition");
+            const entry = tech.tech.find(item => item.name === "self-locating uncertainty");
             if (!entry.count || !simulation.paused || simulation.isChoosing || !["field", "gun", "tech"].includes(value)) return;
             tech.nonDemolition = value
             build.generatePauseRight()
@@ -533,7 +533,7 @@ const tech = {
             build.generatePauseLeft()
         },
     },
-    nonDemolition: null, //quantum non-demolition: "field", "gun", or "tech" stay the same when switching worlds
+    nonDemolition: null, //self-locating uncertainty: "field", "gun", or "tech" stay the same when switching worlds
     isNonDemolitionKept(t, mode = tech.nonDemolition) { //t is a tech.tech entry
         if (mode === "field") return !!t.isFieldTech
         if (mode === "gun") return !!t.isGunTech
@@ -1042,7 +1042,7 @@ const tech = {
         frequencyDefault: 3,
         isSkinUpgrade: true,
         allowed() {
-            return tech.isEigenstate && m.fieldMode !== 9 && m.fieldMode !== 8 && m.fieldMode !== 11
+            return tech.isEigenstate && m.fieldMode !== 9 && m.fieldMode !== 8
         },
         requires: "eigenstate, not wormhole, pilot wave",
         effect() {
@@ -1768,6 +1768,33 @@ const tech = {
         },
         remove() {
             tech.isFarAwayDmg = false;
+        }
+    },
+    {
+        name: "outlier",
+        descriptionFunction() {
+            const shot = { //what gets bigger for each gun
+                "nail gun": "nail", "shotgun": "shot", "super balls": "shot", "missiles": "missile",
+                "grenades": "grenade", "spores": "sporangium", "drones": "drone", "foam": "bubble", "harpoon": "harpoon", "mine": "mine",
+            }[b.guns[b.activeGun]?.name] ?? "bullet"
+            const explosion = ", and a bigger <strong class='explode' data-help='explode'>explosion</strong>"
+            const extra = { missile: explosion, grenade: explosion, sporangium: ", and more spores", mine: ", and bigger nails" }[shot] ?? ""
+            return `every <strong>5</strong> seconds your next ${shot}<br>has <strong>5x</strong> <strong>mass</strong>${extra}`
+        },
+        maxCount: 1,
+        count: 0,
+        frequency: 1,
+        frequencyDefault: 1,
+        allowed() {
+            return b.inventory.some(i => b.guns[i].name !== "laser" && b.guns[i].name !== "wave")
+        },
+        requires: "a gun, not laser or wave",
+        effect() {
+            tech.isOutlier = true
+            b.outlierCycle = 0
+        },
+        remove() {
+            tech.isOutlier = false
         }
     },
     {
@@ -3380,9 +3407,9 @@ const tech = {
         frequency: 1,
         frequencyDefault: 1,
         allowed() {
-            return m.fieldMode !== 9 && m.fieldMode !== 11 && !tech.isTokamak && !tech.isReel
+            return m.fieldMode !== 9 && !tech.isTokamak && !tech.isReel
         },
-        requires: "not wormhole, portal, reel, tokamak",
+        requires: "not wormhole, reel, tokamak",
         effect() {
             tech.blockDamage = 0.3
         },
@@ -3400,9 +3427,9 @@ const tech = {
         frequency: 2,
         frequencyDefault: 2,
         allowed() {
-            return (tech.blockDamage > 0.075 || tech.isPrinter || tech.isTokamak || tech.isThrowBlocks) && m.fieldMode !== 8 && m.fieldMode !== 9 && m.fieldMode !== 11
+            return (tech.blockDamage > 0.075 || tech.isPrinter || tech.isTokamak || tech.isThrowBlocks) && m.fieldMode !== 8 && m.fieldMode !== 9
         },
-        requires: "mass driver, additive manufacturing, tokamak, not wormhole, pilot wave, portal",
+        requires: "mass driver, additive manufacturing, tokamak, not wormhole, pilot wave",
         effect() {
             tech.isGroupThrow = true
         },
@@ -3419,9 +3446,9 @@ const tech = {
         frequency: 3,
         frequencyDefault: 3,
         allowed() {
-            return (tech.blockDamage > 0.075 || tech.isPrinter || tech.isThrowBlocks) && m.fieldMode !== 8 && m.fieldMode !== 9 && m.fieldMode !== 11 && !tech.isTokamak
+            return (tech.blockDamage > 0.075 || tech.isPrinter || tech.isThrowBlocks) && m.fieldMode !== 8 && m.fieldMode !== 9 && !tech.isTokamak
         },
-        requires: "mass driver, additive manufacturing, not pilot wave, tokamak, wormhole, portal",
+        requires: "mass driver, additive manufacturing, not pilot wave, tokamak, wormhole",
         effect() {
             tech.isAddBlockMass = true
         },
@@ -3437,9 +3464,9 @@ const tech = {
         frequency: 3,
         frequencyDefault: 3,
         allowed() {
-            return (tech.blockDamage > 0.075 || tech.isPrinter || tech.isThrowBlocks) && m.fieldUpgrades[m.fieldMode].name !== "pilot wave" && m.fieldUpgrades[m.fieldMode].name !== "wormhole" && m.fieldUpgrades[m.fieldMode].name !== "portal" && !tech.isTokamak
+            return (tech.blockDamage > 0.075 || tech.isPrinter || tech.isThrowBlocks) && m.fieldUpgrades[m.fieldMode].name !== "pilot wave" && m.fieldUpgrades[m.fieldMode].name !== "wormhole" && !tech.isTokamak
         },
-        requires: "mass driver, additive manufacturing, not pilot wave, tokamak, wormhole, portal",
+        requires: "mass driver, additive manufacturing, not pilot wave, tokamak, wormhole",
         effect() {
             tech.isBlockRestitution = true
         },
@@ -4842,15 +4869,15 @@ const tech = {
         }
     },
     {
-        name: "quantum non-demolition",
-        link: `<a target="_blank" href='https://en.wikipedia.org/wiki/Quantum_nondemolition_measurement' class="link">quantum non-demolition</a>`,
+        name: "self-locating uncertainty",
+        link: `<a target="_blank" href='https://en.wikipedia.org/wiki/Many-worlds_interpretation' class="link">self-locating uncertainty</a>`,
         descriptionFunction() {
             const modes = {
                 field: `${powerUps.orb.field()} &nbsp;${powerUps.orb.fieldTech()} &nbsp;${powerUps.orb.coupling(1)}`,
                 gun: `${powerUps.orb.gun()} &nbsp;${powerUps.orb.gunTech()} &nbsp;${powerUps.orb.ammo(1)}`,
                 tech: `${powerUps.orb.tech()} ${powerUps.orb.research(1)}`,
             }
-            let menu
+            let menu = "" //only show the orbs in the drop down after you have it, so tech choices and experiment mode stay 2 lines
             if (this.count > 0 && !this.isLost && !build.isExperimentSelection) {
                 const mode = modes[tech.nonDemolition] ? tech.nonDemolition : "field"
                 //the options have orb pictures, so this is a details element instead of a select
@@ -4859,8 +4886,6 @@ const tech = {
                     menu += `<div class="non-demolition-option${key === mode ? " non-demolition-option-selected" : ""}" onclick="tech.inputHTML.nonDemolition('${key}')">${modes[key]}</div>`
                 }
                 menu += `</details>`
-            } else {
-                menu = `<br>${modes.field} &nbsp; or &nbsp; ${modes.gun} &nbsp; or &nbsp; ${modes.tech}`
             }
             return `when <span class="color-paused" data-help="pause">PAUSED</span> select what doesn't <strong>change</strong> when<br>you enter an <strong class='alt' data-help='alternate-reality'>alternate reality</strong> ${menu}`
         },
@@ -5866,7 +5891,7 @@ const tech = {
     {
         name: "crystallography",
         descriptionFunction() {
-            return `if there are no <strong>power ups</strong> on the level<br>mobs have a <strong>3x</strong> chance to spawn ${powerUps.orb.coupling(1)} ${powerUps.orb.ammo(1)} ${powerUps.orb.boost(1)} ${powerUps.orb.heal(1)} ${powerUps.orb.Casimir(1)} ${powerUps.orb.qubit(1)}`
+            return `if there are no <strong>power ups</strong> on the level mobs have a<br><strong>3x</strong> chance to spawn ${powerUps.orb.coupling(1)} ${powerUps.orb.ammo(1)} ${powerUps.orb.boost(1)} ${powerUps.orb.heal(1)} ${powerUps.orb.Casimir(1)} ${powerUps.orb.qubit(1)}<em style ="float: right;">(${powerUp.length === 0 ? 3 : 1}x)</em>`
         },
         maxCount: 1,
         count: 0,
@@ -7976,6 +8001,26 @@ const tech = {
         }
     },
     {
+        name: "fatigue",
+        link: `<a target="_blank" href='https://en.wikipedia.org/wiki/Fatigue_(material)' class="link">fatigue</a>`,
+        description: "after <strong>super balls</strong> hit <strong class='block' data-help='block'>blocks</strong> they<br>shatter into more <strong>super balls</strong>",
+        isGunTech: true,
+        maxCount: 1,
+        count: 0,
+        frequency: 2,
+        frequencyDefault: 2,
+        allowed() {
+            return tech.haveGunCheck("super balls") || tech.isSuperMine
+        },
+        requires: "super balls",
+        effect() {
+            tech.isBallCleave = true
+        },
+        remove() {
+            tech.isBallCleave = false
+        }
+    },
+    {
         name: "autocannon",
         description: "fire <strong>+2</strong> <strong>super balls</strong> in a line<br><strong>1.4x</strong> <strong>super ball</strong> velocity and gravity",
         isGunTech: true,
@@ -8628,9 +8673,9 @@ const tech = {
         frequency: 2,
         frequencyDefault: 2,
         allowed() {
-            return tech.haveGunCheck("grenades") && !tech.isSmartRadius && !tech.isEnergyHealth
+            return tech.haveGunCheck("grenades") && !tech.isSmartRadius && !tech.isEnergyHealth && !tech.grenadeBounces
         },
-        requires: "grenades, not shaped charges, mass-energy",
+        requires: "grenades, not shaped charges, mass-energy, impulse",
         effect() {
             tech.isImmuneExplosion = true;
             tech.isRPG = true;
@@ -8651,9 +8696,9 @@ const tech = {
         frequency: 2,
         frequencyDefault: 2,
         allowed() {
-            return tech.haveGunCheck("grenades") && !tech.isNeutronBomb && !tech.isBlockExplode
+            return tech.haveGunCheck("grenades") && !tech.isNeutronBomb && !tech.isBlockExplode && !tech.grenadeBounces
         },
-        requires: "grenades, not neutron bomb, chain reaction",
+        requires: "grenades, not neutron bomb, chain reaction, impulse",
         effect() {
             tech.isVacuumBomb = true;
             b.setGrenadeMode()
@@ -8661,6 +8706,27 @@ const tech = {
         remove() {
             tech.isVacuumBomb = false;
             b.setGrenadeMode()
+        }
+    },
+    {
+        name: "impulse",
+        // description: "<strong>grenades</strong> <strong>bounce</strong> <strong>+1</strong> time with a <strong>0.8x</strong> <strong class='explode' data-help='explode'>explosion</strong><br>then <strong class='explode' data-help='explode'>explode</strong> on <strong>contact</strong> or after <strong>3</strong> seconds",
+        description: "<strong>grenades</strong> <strong>bounce</strong> <strong>+1</strong> time with a <strong>0.8x</strong> <strong class='explode' data-help='explode'>explosion</strong><br>then <strong class='explode' data-help='explode'>explode</strong> on <strong>contact</strong> or after <strong>3</strong> seconds",
+
+        isGunTech: true,
+        maxCount: 9,
+        count: 0,
+        frequency: 2,
+        frequencyDefault: 2,
+        allowed() {
+            return tech.haveGunCheck("grenades") && !tech.isRPG && !tech.isVacuumBomb && !tech.isNeutronBomb
+        },
+        requires: "grenades, not rocket-propelled grenade, vacuum bomb, neutron bomb",
+        effect() {
+            tech.grenadeBounces++
+        },
+        remove() {
+            tech.grenadeBounces = 0
         }
     },
     {
@@ -8790,9 +8856,9 @@ const tech = {
         frequency: 2,
         frequencyDefault: 2,
         allowed() {
-            return tech.haveGunCheck("grenades") && !tech.fragments && !tech.isVacuumBomb && !tech.isExplodeRadio && !tech.isBlockExplode && !tech.isClusterExplode && !tech.isPetalsExplode && !tech.isCircleExplode
+            return tech.haveGunCheck("grenades") && !tech.fragments && !tech.isVacuumBomb && !tech.isExplodeRadio && !tech.isBlockExplode && !tech.isClusterExplode && !tech.isPetalsExplode && !tech.isCircleExplode && !tech.grenadeBounces
         },
-        requires: "grenades, not fragmentation, vacuum bomb, iridium-192, pyrotechnics, fireworks, flame test, chain reaction",
+        requires: "grenades, not fragmentation, vacuum bomb, iridium-192, pyrotechnics, fireworks, flame test, chain reaction, impulse",
         effect() {
             tech.isNeutronBomb = true;
             b.setGrenadeMode()
@@ -8849,7 +8915,7 @@ const tech = {
         frequency: 2,
         frequencyDefault: 2,
         allowed() {
-            return tech.isIrradiated || tech.isWormholeDamage || tech.isNeutronBomb || tech.isExplodeRadio || tech.isBlockRadiation || tech.isDroneRadioactive
+            return tech.isIrradiated || tech.isWormholeDamage || tech.isNeutronBomb || tech.isExplodeRadio || tech.isBlockRadiation || tech.isDroneRadioactive || tech.isWormholeRadiation
         },
         requires: "radiation damage source",
         effect() {
@@ -8869,9 +8935,9 @@ const tech = {
         frequency: 2,
         frequencyDefault: 2,
         allowed() {
-            return (tech.isNeutronBomb && tech.haveGunCheck("grenades")) || (tech.isDroneRadioactive && tech.haveGunCheck("drones")) || tech.isExplodeRadio
+            return (tech.isNeutronBomb && tech.haveGunCheck("grenades")) || (tech.isDroneRadioactive && tech.haveGunCheck("drones")) || tech.isExplodeRadio || (tech.isWormholeRadiation && m.fieldMode === 9)
         },
-        requires: "neutron bomb, irradiated drones, iridium-192",
+        requires: "neutron bomb, irradiated drones, iridium-192, Hawking radiation",
         effect() {
             tech.isRadioactiveResistance = true
         },
@@ -9339,7 +9405,7 @@ const tech = {
     },
     {
         name: "standardization",
-        description: `<strong>2x</strong> <strong>drones</strong><em style ="float: right;">(from ${powerUps.orb.ammo()} or <strong class='color-print'>printed</strong>)</em><br><strong>0.6x</strong> drone <strong>duration</strong>`,
+        description: `<strong>2x</strong> <strong>drones</strong><em style ="float: right;">(from ${powerUps.orb.ammo()} or <strong class='color-print'>printed</strong>)</em><br><strong>0.7x</strong> drone <strong>duration</strong>`,
         isGunTech: true,
         maxCount: 1,
         count: 0,
@@ -9351,7 +9417,7 @@ const tech = {
         requires: "drones, not irradiated drones",
         effect() {
             let i, len
-            tech.droneCycleReduction = 0.6
+            tech.droneCycleReduction = 0.7
             tech.droneEnergyReduction = 0.3
             for (i = 0, len = b.guns.length; i < len; i++) { //find which gun
                 if (b.guns[i].name === "drones") b.guns[i].ammoPack *= 2
@@ -10927,7 +10993,7 @@ const tech = {
     },
     {
         name: "eddy current",
-        description: "<strong>perfect diamagnetism</strong> pushes <strong>you</strong> and it<br><strong class='color-s' data-help='slow'>slows</strong> nearby mobs, <strong>radius</strong> scales with <strong class='energy' data-help='energy'>energy</strong>",
+        description: "<strong>perfect diamagnetism</strong> pushes <strong>you</strong> and<br><strong class='color-s' data-help='slow'>slows</strong> nearby mobs, <strong>radius</strong> scales with <strong class='energy' data-help='energy'>energy</strong>",
         isFieldTech: true,
         maxCount: 1,
         count: 0,
@@ -10946,21 +11012,43 @@ const tech = {
     },
     {
         name: "Meissner effect",
-        description: "<strong>1.55x</strong> perfect diamagnetism <strong>radius</strong><br><strong>+22°</strong> perfect diamagnetism circular <strong>arc</strong>",
+        descriptionFunction() {
+            if (tech.isRay) return `<strong>perfect diamagnetism's</strong> is <strong>1.33x</strong> longer <em style ="float: right;">(${Math.round(m.fieldUpgrades[2].rayLength(this.count))})</em>` //the line's length
+            return "<strong>perfect diamagnetism</strong> is more <strong>aerostatic</strong><br><strong>1.35x</strong> <strong>radius</strong> and <strong>+17°</strong> circular <strong>arc</strong>"
+        },
         isFieldTech: true,
-        maxCount: 1,
+        maxCount: 3,
         count: 0,
-        frequency: 2,
-        frequencyDefault: 2,
+        frequency: 3,
+        frequencyDefault: 3,
         allowed() {
             return m.fieldMode === 2
         },
         requires: "perfect diamagnetism",
         effect() {
-            tech.isBigField = true;
+            tech.meissnerCount++
         },
         remove() {
-            tech.isBigField = false;
+            tech.meissnerCount = 0
+        }
+    },
+    {
+        name: "ray",
+        description: "<strong>perfect diamagnetism</strong> is a <strong>straight line</strong> and<br><strong>solid</strong> after you release it, but no longer <strong>aerostatic</strong>",
+        isFieldTech: true,
+        maxCount: 1,
+        count: 0,
+        frequency: 3,
+        frequencyDefault: 3,
+        allowed() {
+            return m.fieldMode === 2
+        },
+        requires: "perfect diamagnetism",
+        effect() {
+            tech.isRay = true
+        },
+        remove() {
+            tech.isRay = false
         }
     },
     {
@@ -12440,6 +12528,26 @@ const tech = {
             tech.isSpaghettification = false
         }
     },
+    {
+        name: "Hawking radiation",
+        link: `<a target="_blank" href='https://en.wikipedia.org/wiki/Hawking_radiation' class="link">Hawking radiation</a>`,
+        description: "<strong class='color-worm' data-help='wormhole'>wormholes</strong> leave behind <strong class='color-p' data-help='radioactive'>radiation</strong><br>that does <strong class='color-p' data-help='radioactive'>area</strong> <strong class='color-d' data-help='damage'>damage</strong> to mobs and you",
+        isFieldTech: true,
+        maxCount: 1,
+        count: 0,
+        frequency: 2,
+        frequencyDefault: 2,
+        allowed() {
+            return m.fieldMode === 9
+        },
+        requires: "wormhole",
+        effect() {
+            tech.isWormholeRadiation = true
+        },
+        remove() {
+            tech.isWormholeRadiation = false
+        }
+    },
     // {
     //     name: "rip",
     //     description: "after a <strong class='color-worm' data-help='wormhole'>wormhole</strong> goes away it leaves behind a rip in spacetime that <strong class='color-d' data-help='damage'>damages</strong> mobs and also you",
@@ -13719,9 +13827,9 @@ const tech = {
         isInstant: true,
         isJunk: true,
         allowed() {
-            return m.fieldMode !== 8 && m.fieldMode !== 9 && m.fieldMode !== 11 && !tech.isTokamak
+            return m.fieldMode !== 8 && m.fieldMode !== 9 && !tech.isTokamak
         },
-        requires: "not pilot wave, tokamak, wormhole, portal",
+        requires: "not pilot wave, tokamak, wormhole",
         effect() {
             m.throwBlock = m.throwSelf
         },
@@ -13738,9 +13846,9 @@ const tech = {
         // isInstant: true,
         isJunk: true,
         allowed() {
-            return m.fieldMode !== 8 && m.fieldMode !== 9 && m.fieldMode !== 11 && !tech.isTokamak
+            return m.fieldMode !== 8 && m.fieldMode !== 9 && !tech.isTokamak
         },
-        requires: "not pilot wave, tokamak, wormhole, portal",
+        requires: "not pilot wave, tokamak, wormhole",
         effect() {
             tech.isStaticBlock = true
         },

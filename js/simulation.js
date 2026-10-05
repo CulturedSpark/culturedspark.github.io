@@ -152,7 +152,7 @@ const simulation = {
                 const options = []
                 for (let i = 0; i < tech.tech.length; i++) {
                     const t = tech.tech[i]
-                    if (t.count < t.maxCount && t.allowed() && !t.isBadRandomOption && !t.isLore && !t.isJunk && !t.isAltRealityTech && !tech.isNonDemolitionKept(t, action.keep ?? null)) { //quantum non-demolition only replaces the tech it didn't keep
+                    if (t.count < t.maxCount && t.allowed() && !t.isBadRandomOption && !t.isLore && !t.isJunk && !t.isAltRealityTech && !tech.isNonDemolitionKept(t, action.keep ?? null)) { //self-locating uncertainty only replaces the tech it didn't keep
                         for (let j = 0; j < t.frequency; j++) options.push(i)
                     }
                 }
@@ -1503,6 +1503,8 @@ const simulation = {
             const intersections = [];
 
             for (const obj of domain) {
+                const bounds = obj.bounds; //skip the whole body if it's away from the ray
+                if (rayMaxX < bounds.min.x || bounds.max.x < rayMinX || rayMaxY < bounds.min.y || bounds.max.y < rayMinY) continue;
                 // iterate edges [i] -> [i+1]
                 for (let i = 0; i < obj.vertices.length - 1; i++) {
                     const a = obj.vertices[i];
@@ -1539,6 +1541,7 @@ const simulation = {
             for (let bodyIndex = 0; bodyIndex < map.length; bodyIndex++) {
                 if (bodyIndex === excludedBodyIndex) continue;
                 const obj = map[bodyIndex];
+                if (obj.isRay) continue //tech: ray, you can see through the line left behind
                 const bounds = obj.bounds;
                 if (rayMaxX < bounds.min.x || bounds.max.x < rayMinX ||
                     rayMaxY < bounds.min.y || bounds.max.y < rayMinY) continue;
@@ -1673,10 +1676,13 @@ const simulation = {
         },
 
         circleLoS(pos, radius) {
+            const solid = map.some(who => who.isRay) ? map.filter(who => !who.isRay) : map //tech: ray, you can see through the line left behind
             let test
             function allCircleLineCollisions(c, radius, domain) {
                 var lines = [];
                 for (const obj of domain) {
+                    const bounds = obj.bounds; //skip bodies away from the circle, the extra 1 matches the distance check below
+                    if (c.x + radius + 1 < bounds.min.x || bounds.max.x < c.x - radius - 1 || c.y + radius + 1 < bounds.min.y || bounds.max.y < c.y - radius - 1) continue;
                     for (var i = 0; i < obj.vertices.length - 1; i++) lines.push(simulation.sight.circleLineCollisions(obj.vertices[i], obj.vertices[i + 1], c, radius));
                     lines.push(simulation.sight.circleLineCollisions(obj.vertices[obj.vertices.length - 1], obj.vertices[0], c, radius));
                 }
@@ -1703,31 +1709,28 @@ const simulation = {
             }
 
             var vertices = [];
+            const radiusSquared = radius * radius
             for (const obj of simulation.sight.intersectMap) {
                 for (var i = 0; i < obj.vertices.length; i++) {
                     const vertex = obj.vertices[i];
+                    //skip corners outside the circle, where walls cross the circle is found below with circleCollisions
+                    if ((vertex.x - pos.x) ** 2 + (vertex.y - pos.y) ** 2 > radiusSquared) continue
                     const angleToVertex = Math.atan2(vertex.y - pos.y, vertex.x - pos.x);
                     // const distanceToVertex = Math.sqrt((vertex.x - pos.x) ** 2 + (vertex.y - pos.y) ** 2);
                     // const queryPoint = { x: Math.cos(angleToVertex) * (distanceToVertex - 1) + pos.x, y: Math.sin(angleToVertex) * (distanceToVertex - 1) + pos.y }
                     const queryPoint = { x: Math.cos(angleToVertex + Math.PI) + vertex.x, y: Math.sin(angleToVertex + Math.PI) + vertex.y }
 
-                    if (!Matter.Query.segmentAny(map, pos, queryPoint)) {
+                    if (!Matter.Query.segmentAny(solid, pos, queryPoint)) {
                         var distance = Math.sqrt((vertex.x - pos.x) ** 2 + (vertex.y - pos.y) ** 2);
                         var endPoint = { x: vertex.x, y: vertex.y }
 
-                        if (distance > radius) {
-                            const angle = Math.atan2(vertex.y - pos.y, vertex.x - pos.x);
-                            endPoint = { x: Math.cos(angle) * radius + pos.x, y: Math.sin(angle) * radius + pos.y }
-                            distance = radius
-                        }
-
-                        var best = simulation.sight.getIntersection(pos, endPoint, map);
+                        var best = simulation.sight.getIntersection(pos, endPoint, solid);
                         if (best.dist >= distance) best = { x: endPoint.x, y: endPoint.y, dist: distance }
                         vertices.push(best)
 
                         var angle = Math.atan2(vertex.y - pos.y, vertex.x - pos.x);
                         endPoint = { x: Math.cos(angle + 0.001) * radius + pos.x, y: Math.sin(angle + 0.001) * radius + pos.y }
-                        best = simulation.sight.getIntersection(pos, endPoint, map);
+                        best = simulation.sight.getIntersection(pos, endPoint, solid);
 
                         if (best.dist >= radius) best = { x: endPoint.x, y: endPoint.y, dist: radius }
                         vertices.push(best)
@@ -1735,21 +1738,21 @@ const simulation = {
                         angle = Math.atan2(vertex.y - pos.y, vertex.x - pos.x);
                         endPoint = { x: Math.cos(angle - 0.001) * radius + pos.x, y: Math.sin(angle - 0.001) * radius + pos.y }
 
-                        best = simulation.sight.getIntersection(pos, endPoint, map);
+                        best = simulation.sight.getIntersection(pos, endPoint, solid);
                         if (best.dist >= radius) best = { x: endPoint.x, y: endPoint.y, dist: radius }
                         vertices.push(best)
                     }
                 }
             }
 
-            const outerCollisions = allCircleLineCollisions(pos, radius, map);
+            const outerCollisions = allCircleLineCollisions(pos, radius, solid);
             const circleCollisions = [];
             for (const line of outerCollisions) {
                 for (const vertex of line) {
                     const distance = Math.sqrt((vertex.x - pos.x) ** 2 + (vertex.y - pos.y) ** 2)
                     const angle = Math.atan2(vertex.y - pos.y, vertex.x - pos.x);
                     const queryPoint = { x: Math.cos(angle + Math.PI) + vertex.x, y: Math.sin(angle + Math.PI) + vertex.y }
-                    if (Math.abs(distance - radius) < 1 && !Matter.Query.segmentAny(map, pos, queryPoint)) circleCollisions.push(vertex)
+                    if (Math.abs(distance - radius) < 1 && !Matter.Query.segmentAny(solid, pos, queryPoint)) circleCollisions.push(vertex)
                 }
             }
             for (var i = 0; i < circleCollisions.length; i++) {
@@ -1779,9 +1782,12 @@ const simulation = {
 
                 // shoot ray between them
                 var endPoint = { x: Math.cos(newAngle) * radius + pos.x, y: Math.sin(newAngle) * radius + pos.y }
-                var best = simulation.sight.getIntersection(pos, endPoint, map);
+                var best = simulation.sight.getIntersection(pos, endPoint, solid);
                 vertices.push(vertex);
                 if (best.dist <= radius) vertices.push({ x: best.x, y: best.y })
+            }
+            if (vertices.length === 0 && !Matter.Query.point(solid, pos).length) { //no walls in the circle, so see the whole circle
+                for (let angle = -Math.PI; angle < Math.PI; angle += Math.PI / 2) vertices.push({ x: Math.cos(angle) * radius + pos.x, y: Math.sin(angle) * radius + pos.y })
             }
             vertices.sort((a, b) => Math.atan2(a.y - pos.y, a.x - pos.x) - Math.atan2(b.y - pos.y, b.x - pos.x));
             return vertices;
@@ -1806,6 +1812,7 @@ const simulation = {
             //runs at each new level to store the path for the map since the map doesn't change
             simulation.draw.mapPath = new Path2D();
             for (let i = 0, len = map.length; i < len; ++i) {
+                if (map[i].isRay) continue //tech: ray, draws its own walls
                 let vertices = map[i].vertices;
                 simulation.draw.mapPath.moveTo(vertices[0].x, vertices[0].y);
                 for (let j = 1; j < vertices.length; j += 1) {
@@ -1813,11 +1820,27 @@ const simulation = {
                 }
                 simulation.draw.mapPath.lineTo(vertices[0].x, vertices[0].y);
             }
+            if (simulation.draw.drawMapPath === simulation.draw.drawMapSightSetting) simulation.draw.lineOfSightPrecalculation() //keep the line of sight setting up to date when the map changes
+        },
+        isLineOfSight() { //subway, the line of sight setting, and community maps with line of sight all replace drawMapPath
+            return simulation.draw.drawMapPath !== simulation.draw.drawMapPathDefault
+        },
+        mapColor(mapColor = color.map) { //for things drawn to look like the map, like covers over hidden areas, line of sight doesn't fill the map so they match the background instead
+            return simulation.draw.isLineOfSight() ? document.body.style.backgroundColor : mapColor
+        },
+        updateLineOfSightSetting() { //line of sight setting draws every level like subway, levels with their own map drawing are left alone
+            if (localSettings.isLineOfSight && simulation.draw.drawMapPath === simulation.draw.drawMapPathDefault) {
+                simulation.draw.drawMapPath = simulation.draw.drawMapSightSetting
+                simulation.draw.lineOfSightPrecalculation() //required precalculation for line of sight
+            } else if (!localSettings.isLineOfSight && simulation.draw.drawMapPath === simulation.draw.drawMapSightSetting) {
+                simulation.draw.drawMapPath = simulation.draw.drawMapPathDefault
+            }
         },
         lineOfSightPrecalculation() {
             simulation.sight.intersectMap = [];
             for (let i = 0; i < map.length; i++) {
                 const obj = map[i];
+                if (obj.isRay) continue //tech: ray, you can see through the line left behind
                 const newVertices = [];
                 for (let j = 0; j < obj.vertices.length; j++) {
                     const vertex = obj.vertices[j];
@@ -1845,7 +1868,10 @@ const simulation = {
             ctx.fillStyle = color.map;
             ctx.fill(simulation.draw.mapPath);
         },
-        drawMapSight() {
+        drawMapSightSetting() {
+            simulation.draw.drawMapSight(true)
+        },
+        drawMapSight(isShadeSight = false) {
             if (!simulation.isTimeSkipping) {
                 const pos = m.pos
                 const radius = 4000
@@ -1882,6 +1908,11 @@ const simulation = {
                     ctx.globalCompositeOperation = "destination-in";
                     ctx.fillStyle = "#000";
                     ctx.fill();
+                    if (isShadeSight) { //darken what you can see behind everything drawn so far, subway does this with a rect in level.custom
+                        ctx.globalCompositeOperation = "destination-over";
+                        ctx.fillStyle = "rgba(0,0,0,0.1)";
+                        ctx.fill();
+                    }
                     ctx.globalCompositeOperation = "source-over";
 
                     // make map visible
