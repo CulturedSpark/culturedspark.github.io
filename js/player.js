@@ -80,9 +80,17 @@ const m = {
     },
     defaultMass: 5,
     mass: 5,
+    Massdown: -1,
+    Massup: 1,
     FxNotHolding: 0.015,
     Fx: 0.016, //run Force on ground //
     jumpForce: 0.42,
+    setMassUp() {
+        m.mass += m.Massup
+    },
+    setMassdown() {
+        m.mass += m.Massdown
+    },
     setMovement() {
         // console.log(player.mass)
         // m.FxAir = 0.4 / mass / mass 
