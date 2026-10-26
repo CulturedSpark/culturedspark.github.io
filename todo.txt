@@ -1,48 +1,94 @@
-tech: surface tension - foam forms bubbles that merge into one growing bubble on each mob and catch more foam, 1.2x foam damage
-  the old surface tension, 1.4x foam damage, is renamed Marangoni effect
-tech: alternator - your harpoon swings in a quick arc, and still has 0.05x harpoon energy cost
-  aims at the mob nearest your aim,
-  scrapes along walls, knocks blocks aside, bounces off mobs,
-  grabs every power up it touches
-  crouch for a longer, narrower, slower swing
-  railgun: pick stab or railgun from a drop down on the harpoon in the pause menu, with alternator you can also pick sweep
-perfect diamagnetism: the field is drawn as purple fills when you have Hall effect, and lines otherwise, Hall effect and ray are no longer compatible
-perfect diamagnetism: while falling with the field on, the field puffs up wider and flatter when aimed up, and narrower when aimed down
-tech: symbiosis - after a mob dies lose 0.01x max health or energy, instead of 1
-removed link to game pad support since it's not working with some of the new changes, like difficulty power up
-boss: floodFillBoss - sends out paths that bounce off walls and blocks searching for you, when one sees you it dashes down the path and leaves a mortar blast
-alternate reality: qubits are no longer lost, but if you have more than 5 qubits they are randomized by 0.5x to 1.5x
-tech: preserve, reserve - show (empty) after you spawn all of their heals or ammo
 
+field: plasma torch - now extrudes a hot stream of plasma
+  the extruder tech is removed, since the stream replaces it
+  secret combo ←↓→→↓ toggles hose mode, the stream droops like water from a hose
+  plasma ball and plasma-bot are no longer compatible with refractory metal or electric potential
+tech: soliton - every 4 seconds, for 5 energy a wave packet rides down the plasma stream and damages each mob the stream is wrapped on, energy above max is spent for 0.01x more damage per energy
+  plasma ball bursts a black ring that damages nearby mobs, for 10 energy and 0.02x more damage per energy above max
+  plasma-bot sparks bonus damage on its target, for 10 energy and 0.02x more damage per energy above max
+tech: electronvolt - each mob touching the plasma stream sends 100 energy per second back up the stream to you
+  plasma ball gives back 0.75x the energy it used when it explodes
+  plasma-bot uses 0.75x energy
+tech: cold plasma - a cold wave bounces back and forth along the plasma stream and freezes mobs it touches for 4 seconds
+  plasma ball freezes mobs for 2 seconds by contact and arcs and so do plasma-bot beams
+tech: electric potential - your plasma stream curves toward nearby mobs,
+  grows 2x longer once it does, and stretches to keep hold of mobs that move away
+tech: refractory metal - no longer requires extruder, each stack widens the plasma stream by 45, down from 55
+tech: plasma jet - costs 2 research, up from 1
+tech: anti-shear topology - also makes plasma last 1.3x longer
 
-difficulty: next TIER mobs - each level starts with an extra mob from 1 tier higher
-  the extra mob can be T5, T5 mobs don't spawn any other way
-difficulty: faster mobs - mobs move about 1.2x faster
-  base mobs are now slower by about 0.9x movement, 
-  faster mobs are 1.1x faster than the previous patch
-mob: spinner5 - T5 spinner, spins up faster, charges harder, charges twice, and does 4x damage
-mob: focuser5 - T5 focuser, its laser reaches farther, locks on faster, drains more energy, and does 6x damage
-mob: pulsar5 - T5 pulsar, a bigger blast that aims and fires faster and does 8x damage
-mob: slicer5 - T5 slicer, a longer and faster sword, moves and dodges faster, and does 8x damage
+tech: vacuum energy - now sets your energy to 1000, up from 4x max energy, and still sets it to 0 25% of the time
+tech: surface tension - 1.4x foam damage, up from 1.2x, about 1.7x against long fights since bubbles catch more foam
+tech: scrap refit - also unlocks with barycenter, causality bots, or any scrap bots out, and no longer shortens bots that last longer than 15 seconds
+tech: band gap, enthalpy, virtual particles, Casimir effect, qubit, Bitter electromagnet, anti-shear topology - descriptions show your total from all stacks
+boss: powerUpBoss - each tech it steals makes it 1.2x faster and 1.3x denser, down from 1.4x
+pause menu: the active constraint is listed in difficulty parameters, right below random constraints
+title screen: the player drops in, try moving, jumping, and throwing a block, climb the keys, mouse, buttons, and open menus, knock down the logo
+
+movement: subtle changes, hard to notice
+  letting go of jump early makes shorter hops, and holding jump hangs a bit longer at the top
+  jumping into the edge of a ceiling slides you around it, and pressing into a ledge you barely missed climbs you onto it
+  tapping jump just before you land now jumps
+  2 more frames of coyote time
+  you stand back up faster after leaving a low gap in the air
+  turning around in the air is faster
+  carrying blocks slows you down less, especially in the air
 
 
 bug fixes
-  with just one of 0.5x damage or 2x damage taken, final boss boulders, mines, and extra bosses, and trainBoss2 freeze grenades come at the right rate, they came half as often
-  mob shields aren't counted twice anymore, they took about 2x damage from explosions and other area damage, and shielded mobs never copied with mobs reproduce
-  salvo keeps its full cooldown with wave, railgun, or autocannon equipped, they let you fire again early
-  pressure vessel keeps its foam charge when you switch guns, so it works with salvo now
-  Brownian ratchet shows the heal number and console text when its zone heals you
-  working mass stops printing blocks after you lose it, extra copies kept working in alternate realities
-  vanishing platforms are fully gone while they're gone, they used to hide at one spot on the map where they could still block lasers and mob vision, and show up on some community maps
-  construction mode doesn't zoom with the scroll wheel while paused, choosing, or in the experiment menu
-
-
+  while you're cloaked, hop bullets, hop mother, slicers, and slashers go after the last place they saw you instead of where you are
+  plasma-bot is no longer offered after dielectric, since dielectric does nothing without plasma torch
+  the lore room's platforms and walls stay visible in performance mode
+  hyperpolarisation protects against collisions immediately after a kill
+  stronger constraints only toughens shields on levels with more shielded mobs
+  stronger reduced healing now restores less health than normal reduced healing
+  fewer heals and ammo no longer removes other starting power up bonuses
+  automatic fps setup resumes after starting a run early and keeps your manual settings
+  experiment mode: preserve shows up when sorting by heal tech
+  experiment mode: smelting can be picked after rebar
+  mutualism returns borrowed energy even while you are immune to damage
+  adhesive foam pulls nearby mobs together even when they have shields
+  brownian ratchet healing zones no longer follow you to the next level
+  continuing a run keeps duplicated power ups looking different from ordinary ones
+  optimization no longer leaves extra eigenstate blocks when switching skins
+  localization keeps marginal utility's ammo bonus in alternate realities
+  typing in the pause console no longer leaves movement or firing stuck
+  surface portals no longer move level doors
+  invariant no longer runs time backward when aiming both portals
+  beam splitter no longer repeatedly copies leftover heals
+  flux pinning and electric generator descriptions show your total stun time and energy per deflect from all stacks
+  incendiary nails no longer explode early when turning through level portals
+  portal previews stop processing views that are completely offscreen
+  mobs reproduce stops at the starting number of normal mobs instead of doubling it
+  ray no longer keeps the exit blocked on the final level
+  menu settings work with keyboard controls without changing when you return to playing
+  meissner effect describes its actual radius, arc, and ray length bonuses
+  outlier mines only pass their size to their own shots, not nearby bullets or bots
+  double beta decay doubles symbiosis boss rewards
+  title screen settings stay in sync after a run, clicking "performance mode" could secretly turn it on and hide the tech list and in game console
+  every level spawns a research unless you pick "1 fewer research each level", it used to stop after a few levels on higher difficulties
+  switching fields clears old grappling hook ropes
+  jelly bosses clean up old membrane links to prevent them building up between levels
+  split jelly bosses move apart together with their membranes
+  harpoon swings respect hit cooldowns, mode switching keeps the correct ammo, and alternate realities clear old projectiles
+  laser and wave don't run out of ammo after you continue a run that was saved after another run in the same tab
+  continuing a run keeps its mob and boss order, it used to get reshuffled
+  power ups on the first level fall down their tube every run, they used to jump out of it on every run after the first, and sometimes bounced onto the exit shelf
+  non-Newtonian's description says "after losing health" instead of showing a red damage tooltip, since it's about damage you take
 
 
 *********************************************************** TODO *****************************************************
 
 
-  add more T5 mob types
+
+add alternator-like swing code to other situations
+  every 3 swings make one with a much bigger range?
+    or stab-stab-swing
+  plasma torch tech?
+  stand along "melee" tech
+  make swing default and stab the upgrade
+
+add more T5 mob types
 
 make some new mobs
   stream line new mob creation and balance testing
