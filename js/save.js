@@ -240,7 +240,7 @@ const saveGame = {
         }
         //The mode can already be active in the baseline after a previous run.
         changed.fields["time dilation"] = { ...changed.fields["time dilation"], isRewindMode: m.fieldUpgrades[6].isRewindMode }
-        changed.fields["plasma torch"] = { ...changed.fields["plasma torch"], isHose: m.fieldUpgrades[5].isHose }
+        changed.fields["plasma torch"] = { ...changed.fields["plasma torch"], isHighPower: m.fieldUpgrades[5].isHighPower }
         const techCounts = {}
         for (const t of tech.tech) if (t.count > 0) techCounts[t.name] = t.count
         const simulationValues = {}
@@ -267,7 +267,7 @@ const saveGame = {
             simulation.inGameConsole(saveGame.pendingMessage)
             saveGame.pendingMessage = ""
         }
-        if (level.levelsCleared < 1 || simulation.isTraining || build.isExperimentRun || !m.alive) return
+        if (level.levelsCleared < 1 || simulation.isTraining || build.isExperimentRun || !m.alive || levelEditor.isActive) return //the level editor sets levelsCleared to test mobs
         if (level.levels[level.onLevel] === "null") return //the run was already won on final, and the save was cleared
         try {
             saveGame.latest = saveGame.create()
