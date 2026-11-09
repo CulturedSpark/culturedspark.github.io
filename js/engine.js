@@ -154,41 +154,26 @@ function playerOnGroundCheck(event) {
 
 
     for (let i = 0, j = event.pairs.length; i != j; ++i) {
-        if (event.pairs[i].bodyA === jumpSensor) {
-            m.standingOn = event.pairs[i].bodyB; //keeping track to correctly provide recoil on jump
-            if (m.standingOn.alive !== true || m.immuneCycle > m.cycle) enter();
-        }
-
-        //doesn't seem to need to check bodyB (this might be because the player is added so it's earlier in array?)
-        // else if (event.pairs[i].bodyB === jumpSensor) {
-        //     m.standingOn = event.pairs[i].bodyA; //keeping track to correctly provide recoil on jump
-        //     if (m.standingOn.alive !== true || m.immuneCycle > m.cycle) enter();
-        // }
+        const { bodyA, bodyB } = event.pairs[i]
+        const support = bodyA === jumpSensor ? bodyB : bodyB === jumpSensor ? bodyA : null
+        if (!support || (support.alive === true && !(m.immuneCycle > m.cycle))) continue
+        m.standingOn = support
+        enter()
     }
-    m.numTouching = 0;
 }
 
 function playerOffGroundCheck(event) {
     //runs on collisions events
+    if (!m.onGround || m.numTouching) return
     const pairs = event.pairs;
     for (let i = 0, j = pairs.length; i != j; ++i) {
-        if (pairs[i].bodyA === jumpSensor) { //|| pairs[i].bodyB === jumpSensor) {
-            if (m.onGround && m.numTouching === 0) {
-                m.onGround = false;
-                // m.groundCount = 0
-                m.lastOnGroundCycle = m.cycle;
-                m.hardLandCD = 0 // disable hard landing
-                // if (m.checkHeadClear()) {
-                //     if (m.crouch) {
-                //         m.undoCrouch();
-                //     }
-                //     m.yOffGoal = m.yOffWhen.jump;
-                // }
-                if (m.crouch && m.checkHeadClear()) {
-                    m.undoCrouch();
-                }
-                m.yOffGoal = m.crouch ? m.yOffWhen.crouch : m.yOffWhen.jump;
-            }
+        if (pairs[i].bodyA === jumpSensor || pairs[i].bodyB === jumpSensor) {
+            m.onGround = false
+            m.lastOnGroundCycle = m.cycle
+            m.hardLandCD = 0
+            if (m.crouch && m.checkHeadClear()) m.undoCrouch()
+            m.yOffGoal = m.crouch ? m.yOffWhen.crouch : m.yOffWhen.jump
+            return
         }
     }
 }
@@ -412,12 +397,17 @@ function trackLastTouchedBlock(event) {
 }
 
 
+const playerSweep = { body: null, x: 0, y: 0 }
 Events.on(engine, "collisionStart", function (event) {
+    const beforeX = player?.position.x
+    const beforeY = player?.position.y
     for (let i = 0; i < level.surfacePortals.length; i++) level.surfacePortals[i].collide(event) //first, it removes pairs going through a portal
     playerOnGroundCheck(event);
     trackLastTouchedBlock(event);
     // playerHeadCheck(event);
     collisionChecks(event);
+    //Collision effects can relocate the player, for example by rewinding after damage.
+    if (player?.position.x !== beforeX || player?.position.y !== beforeY) playerSweep.body = null
 
 
     // //do we need to also check bodyB
@@ -433,7 +423,38 @@ Events.on(engine, "collisionStart", function (event) {
     //     }
     // }
 });
-Events.on(engine, "afterUpdate", function () {
+//the player can tunnel through a thin wall when one physics step moves it past its middle, then the wall pushes it out the far side
+//each step remembers where the player started, and if it was fast and its center crossed a wall it's put back
+//blocks are left alone, checking every fast block against the whole map each step costs too much
+Events.on(engine, "beforeUpdate", function () {
+    playerSweep.body = player
+    if (player) {
+        m.numTouching = 0 //collisionStart and collisionActive both count support before collisionEnd
+        playerSweep.x = player.position.x
+        playerSweep.y = player.position.y
+    }
+});
+function stopTunneling(who, fromX, fromY) {
+    const dx = who.position.x - fromX
+    const dy = who.position.y - fromY
+    const stepSquared = dx * dx + dy * dy
+    if (!Number.isFinite(stepSquared) || stepSquared < 400) return
+    for (let i = 0; i < level.surfacePortals.length; i++) { //going into a surface portal passes through the map on purpose
+        const pending = level.surfacePortals[i].pending
+        for (let j = 0; j < pending.length; j++) if (pending[j].who === who) return
+    }
+    const from = { x: fromX, y: fromY }
+    const walls = map.filter(wall => !wall.isSensor && Matter.Detector.canCollide(who.collisionFilter, wall.collisionFilter))
+    if (Matter.Query.point(walls, from).length) return //already stuck inside the map, let the engine push it out
+    if (!Matter.Query.segmentAny(walls, from, who.position)) return
+    //its center crossed a wall, put it back and drop its speed toward the wall
+    Matter.Body.setPosition(who, from)
+    const step = Math.sqrt(stepSquared)
+    const into = (who.velocity.x * dx + who.velocity.y * dy) / step
+    if (into > 0) Matter.Body.setVelocity(who, { x: who.velocity.x - into * dx / step, y: who.velocity.y - into * dy / step })
+}
+Events.on(engine, "afterUpdate", function () { //before portals teleport anything
+    if (player && player === playerSweep.body) stopTunneling(player, playerSweep.x, playerSweep.y)
     for (let i = 0; i < level.surfacePortals.length; i++) level.surfacePortals[i].update()
 });
 Events.on(engine, "collisionActive", function (event) {
